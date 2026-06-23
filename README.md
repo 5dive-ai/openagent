@@ -33,9 +33,8 @@ face:
   anchor: "mid-30s, even expression, lived-in startup background, warm f/2 bokeh"
 voice:
   audio:
-    provider: google-tts
-    name: <voice-id>
-    behavior: "dry, even, low-key. terse. lets the work talk."
+    base: Sadaltager                 # the named underlying voice
+    style: "dry, even, low-key. terse. lets the work talk."
   written:
     rules:
       - lowercase, no em-dashes
@@ -45,7 +44,26 @@ voice:
 behavior: "wrote the CLI the fleet runs on. every ship clears his review. answers to nothing but uptime."
 ```
 
-Validate: `npx openagent validate marcus.persona.yaml` *(CLI planned — spec first)*
+## Validate
+
+A persona file is only useful if it conforms. The validator checks any
+`*.persona.yaml` (or `.json`) against the v0.1 [JSON Schema](./schema/persona.schema.json)
+and prints a clear pass/fail with readable errors:
+
+```
+npx github:5dive-ai/openagent validate marcus.persona.yaml
+✓ PASS  marcus.persona.yaml (id: marcus)
+```
+
+```
+✗ FAIL  broken.persona.yaml
+        • .id: 'Bad Id!' does not match required pattern ^[a-z0-9-]+$
+        • .voice.audio: missing required field 'base'
+```
+
+Exit code is `0` when every file is valid, `1` when any file fails — so it
+drops straight into CI. Validate multiple files in one call:
+`openagent validate cast/*.persona.yaml`.
 
 ## Registry — character-packs
 
@@ -61,7 +79,7 @@ v0.1 is the **identity layer only** (face · audio voice · written voice · beh
 
 ## Status
 
-Draft 0.1. The spec is the deliverable; tooling (validator, renderers) follows. Issues + proposals welcome.
+Draft 0.1. Spec + validator are live (`validate`); renderers follow. Issues + proposals welcome.
 
 ## License
 

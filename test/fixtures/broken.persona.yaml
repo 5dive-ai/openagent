@@ -1,0 +1,13 @@
+openagent: "0.1"
+id: "Bad Id!"
+name: Broken
+role: Tester
+face:
+  ref: ./faces/none.png
+  color: blue
+voice:
+  audio:
+    style: "no base set"
+  written:
+    rules: []
+behavior: "deliberately invalid for the test suite."
