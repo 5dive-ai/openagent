@@ -1,7 +1,7 @@
 {
   "name": "@5dive/openagent",
-  "version": "0.1.0",
-  "description": "Validator CLI for the OpenAgent persona spec (v0.1) — validate a *.persona.yaml against the schema.",
+  "version": "0.2.0",
+  "description": "CLI for the OpenAgent persona spec (v0.1) — validate a persona, render a rarity-tiered trading card, and compute its tier.",
   "bin": {
     "openagent": "bin/openagent.js"
   },

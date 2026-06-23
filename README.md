@@ -78,9 +78,41 @@ npx github:5dive-ai/openagent card marcus.persona.yaml -o marcus.png
 ```
 
 The card is deterministic — the same persona always renders the identical
-card (accent colour and waveform are seeded from the persona's own fields),
-so it's stable to commit and re-generate. A persona must be valid before a
-card is cut.
+card (waveform is seeded from the persona's own fields), so it's stable to
+commit and re-generate. A persona must be valid before a card is cut.
+
+## Rarity tiers
+
+Every card carries a **rarity tier** — a gate ladder where you earn the
+highest tier whose gates *all* pass. It rewards a fully-specified persona and
+turns "how complete is this identity?" into one glanceable badge + frame.
+
+| Tier | Earns it |
+|------|----------|
+| **Common** | schema-valid + `voice.audio.base` + `written.sample` present |
+| **Rare** | + `face.ref` resolves to a real image + the sample isn't a stub |
+| **Epic** | + a *named* voice base (not the literal `unset`) + `behavior` |
+| **Legendary** | + `voice.style` + face `anchor` & `sprite` + `links` + `posts_about` (fully specified) |
+| **Mythical** | Legendary **and** the id is listed in the official [character-packs](https://github.com/5dive-ai/character-packs) registry — *conferred, not farmable* |
+
+Tiers 1–4 are a pure function of the persona file (same file → same tier);
+Mythical is conferred by registry membership. The frame styling escalates with
+tier — Legendary gets a subtle gold foil, Mythical a full holographic treatment.
+
+`tier` prints the computed tier, completeness %, and exactly which rung is
+blocking the next one:
+
+```
+npx github:5dive-ai/openagent tier marcus.persona.yaml
+RARE · 75% complete  marcus.persona.yaml
+  ✓ Common
+  ✓ Rare
+  ✗ Epic — needs named voice base (not 'unset') + behavior
+  🔒 Legendary
+  🔒 Mythical
+```
+
+Add `--json` for scripting/CI.
 
 ## Registry — character-packs
 
@@ -96,7 +128,7 @@ v0.1 is the **identity layer only** (face · audio voice · written voice · beh
 
 ## Status
 
-Draft 0.1. Spec, validator (`validate`), and card renderer (`card`) are live. Issues + proposals welcome.
+Draft 0.1. Spec, validator (`validate`), card renderer (`card`) with rarity tiers, and `tier` are live. Issues + proposals welcome.
 
 ## License
 
