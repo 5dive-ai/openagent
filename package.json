@@ -10,6 +10,7 @@
     "bin/",
     "lib/",
     "schema/",
+    "assets/",
     "SPEC.md"
   ],
   "scripts": {
@@ -33,6 +34,7 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "yaml": "^2.5.1"

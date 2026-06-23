@@ -65,6 +65,23 @@ Exit code is `0` when every file is valid, `1` when any file fails — so it
 drops straight into CI. Validate multiple files in one call:
 `openagent validate cast/*.persona.yaml`.
 
+## Card
+
+`card` turns a persona into a shareable PNG "trading card" — the whole
+identity in one image. It exercises every field at once: the avatar from
+`face.ref`, a voice waveform seeded from `voice.audio` (base + style), the
+name, role, and the written `sample`.
+
+```
+npx github:5dive-ai/openagent card marcus.persona.yaml -o marcus.png
+✓ CARD  marcus.png (900×1260, ...KB)
+```
+
+The card is deterministic — the same persona always renders the identical
+card (accent colour and waveform are seeded from the persona's own fields),
+so it's stable to commit and re-generate. A persona must be valid before a
+card is cut.
+
 ## Registry — character-packs
 
 Personas are meant to be shared and forked, like dotfiles. **character-packs** is the public registry of OpenAgent personas — publish yours, fork someone else's, drop it into your runtime. The [`examples/`](./examples) here are the seed packs.
@@ -79,7 +96,7 @@ v0.1 is the **identity layer only** (face · audio voice · written voice · beh
 
 ## Status
 
-Draft 0.1. Spec + validator are live (`validate`); renderers follow. Issues + proposals welcome.
+Draft 0.1. Spec, validator (`validate`), and card renderer (`card`) are live. Issues + proposals welcome.
 
 ## License
 

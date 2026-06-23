@@ -3,6 +3,7 @@
 
 const path = require("path");
 const { validateFile } = require("../lib/validate");
+const { renderCard } = require("../lib/card");
 
 const pkg = require("../package.json");
 
@@ -18,6 +19,7 @@ const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (v0.1)
 
 ${bold("Usage")}
   openagent validate <persona-file> [<persona-file> ...]
+  openagent card <persona-file> [-o <out.png>]
   openagent --help
   openagent --version
 
@@ -26,8 +28,14 @@ ${bold("validate")}
   JSON Schema. Prints a clear pass/fail with readable errors.
   Exit code 0 = all valid, 1 = one or more invalid, 2 = usage/IO error.
 
-${bold("Example")}
+${bold("card")}
+  Renders a shareable PNG "trading card" from a persona: avatar (face.ref),
+  a voice waveform from voice.audio (base+style), name, role, and the
+  written sample. Writes <id>.card.png unless -o is given.
+
+${bold("Examples")}
   openagent validate marcus.persona.yaml
+  openagent card marcus.persona.yaml -o marcus.png
 `;
 
 function main(argv) {
@@ -43,6 +51,41 @@ function main(argv) {
   }
 
   const cmd = args[0];
+
+  if (cmd === "card") {
+    const rest = args.slice(1);
+    let out = null;
+    const positional = [];
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === "-o" || rest[i] === "--out") {
+        out = rest[++i];
+      } else {
+        positional.push(rest[i]);
+      }
+    }
+    if (positional.length === 0) {
+      process.stderr.write(red("card: no persona file given\n\n"));
+      process.stderr.write(USAGE);
+      return 2;
+    }
+    const file = positional[0];
+    // A card should only be cut from a conforming persona.
+    const v = validateFile(file);
+    if (!v.ok) {
+      process.stdout.write(`${red("✗")} ${file} is not a valid persona — fix it first:\n`);
+      for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
+      return 1;
+    }
+    const res = renderCard(file, out);
+    if (!res.ok) {
+      process.stderr.write(red(`card: ${res.error}\n`));
+      return 2;
+    }
+    const kb = Math.round(res.bytes / 1024);
+    process.stdout.write(`${green("✓ CARD")}  ${res.outPath} ${dim(`(${res.width}×${res.height}, ${kb}KB)`)}\n`);
+    return 0;
+  }
+
   if (cmd !== "validate") {
     process.stderr.write(red(`unknown command: ${cmd}\n\n`));
     process.stderr.write(USAGE);

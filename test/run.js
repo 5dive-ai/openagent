@@ -4,6 +4,9 @@
 const path = require("path");
 const assert = require("assert");
 const { validateFile } = require("../lib/validate");
+const { buildSvg } = require("../lib/card");
+const YAML = require("yaml");
+const fs = require("fs");
 
 let failures = 0;
 function check(name, cond) {
@@ -37,6 +40,17 @@ check("flags empty rules array", /rules: must have at least 1 item/.test(joined)
 // 3. Missing file → clean error, not a crash.
 const missing = validateFile(path.join(fixtures, "does-not-exist.yaml"));
 check("missing file handled", missing.ok === false && /cannot read file/.test(missing.errors[0]));
+
+// 4. Card SVG renders, embeds the real face, and is deterministic per-persona.
+const marcusDoc = YAML.parse(fs.readFileSync(path.join(examples, "marcus.persona.yaml"), "utf8"));
+const svg1 = buildSvg(marcusDoc, examples);
+const svg1b = buildSvg(marcusDoc, examples);
+check("card svg is valid-ish svg", /^<svg[\s\S]*<\/svg>$/.test(svg1.trim()));
+check("card embeds face image", /data:image\/png;base64,/.test(svg1));
+check("card render is deterministic", svg1 === svg1b);
+const lilDoc = YAML.parse(fs.readFileSync(path.join(examples, "lilbro.persona.yaml"), "utf8"));
+const svg2 = buildSvg(lilDoc, examples);
+check("different personas differ", svg1 !== svg2);
 
 if (failures) {
   console.log(`\n${failures} test(s) failed`);
