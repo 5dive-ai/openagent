@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/5dive-ai/openagent/main/schema/persona.schema.json",
+  "title": "OpenAgent Persona",
+  "type": "object",
+  "required": ["id", "name", "role", "face", "voice", "behavior"],
+  "additionalProperties": false,
+  "properties": {
+    "openagent": { "type": "string", "description": "spec version, e.g. \"0.1\"" },
+    "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "name": { "type": "string" },
+    "role": { "type": "string" },
+    "behavior": { "type": "string" },
+    "posts_about": { "type": "array", "items": { "type": "string" } },
+    "face": {
+      "type": "object",
+      "required": ["ref", "anchor"],
+      "additionalProperties": false,
+      "properties": {
+        "ref": { "type": "string" },
+        "anchor": { "type": "string" },
+        "full": { "type": "string" }
+      }
+    },
+    "voice": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "audio": {
+          "type": "object",
+          "required": ["provider", "name"],
+          "additionalProperties": false,
+          "properties": {
+            "provider": { "type": "string" },
+            "name": { "type": "string" },
+            "behavior": { "type": "string" }
+          }
+        },
+        "written": {
+          "type": "object",
+          "required": ["rules", "sample"],
+          "additionalProperties": false,
+          "properties": {
+            "rules": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+            "sample": { "type": "string" }
+          }
+        }
+      }
+    },
+    "links": { "type": "object", "additionalProperties": { "type": "string" } }
+  }
+}
