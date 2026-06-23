@@ -2,7 +2,7 @@
 
 // Tiny dependency-free test runner.
 const path = require("path");
-const { validateFile } = require("../lib/validate");
+const { validateFile, validate } = require("../lib/validate");
 const { buildSvg, resolveFace } = require("../lib/card");
 const { computeTier } = require("../lib/tier");
 const YAML = require("yaml");
@@ -84,6 +84,14 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("schemaValid:false = Ungraded (no rungs climb)", schemaBad.level === 0 && schemaBad.gates.common === false);
   const schemaGood = computeTier(marcusDoc, { faceResolved: true, schemaValid: true });
   check("schemaValid:true earns Common", schemaGood.gates.common === true && schemaGood.level >= 1);
+
+  // Doc-level validate(doc) mirrors validateFile and feeds computeTier directly.
+  check("validate(doc) passes a good persona", validate(marcusDoc).ok === true);
+  const docBad = JSON.parse(JSON.stringify(marcusDoc));
+  delete docBad.behavior; // schema-required
+  check("validate(doc) flags a schema-invalid persona", validate(docBad).ok === false);
+  const flowed = computeTier(docBad, { faceResolved: true, schemaValid: validate(docBad).ok });
+  check("validate(doc) verdict flows to Ungraded", flowed.level === 0);
 
   if (failures) {
     console.log(`\n${failures} test(s) failed`);
