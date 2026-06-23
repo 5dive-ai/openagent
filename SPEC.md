@@ -18,16 +18,20 @@ A persona is a single YAML (or JSON) document describing one agent's identity. A
 ### `face`
 | Field | Req | Notes |
 |-------|-----|-------|
-| `ref` | ✓ | path/URL to the ONE canonical image. Every render (avatar, reel, 3D model) must match it. |
+| `ref` | ✓ | path/URL to the ONE canonical image. Every render (avatar, sprite, reel, 3D model) must match it. |
 | `anchor` | ✓ | text description of the locked likeness, so re-gens stay on-model. |
 | `full` | – | optional full-body reference. |
+| `sprite` | – | optional sprite sheet of expressions, for animation/feed use. |
 
 ### `voice.audio`
+A custom voice is reproducible from its **base + style**, not a fragile per-generation handle — same base + same style yields the same character every time. `ref` optionally anchors it to one canonical clip (like `face.ref` anchors the image); clone that clip once for a stable reusable id.
+
 | Field | Req | Notes |
 |-------|-----|-------|
-| `provider` | ✓ | e.g. `google-tts`, `elevenlabs`. |
-| `name` | ✓ | provider voice id. |
-| `behavior` | – | how they speak (pace, energy). |
+| `base` | ✓ | the named underlying voice (e.g. a Gemini/Flow voice like `Fenrir`, `Sadaltager`). |
+| `style` | – | the direction layered on the base: pace, energy, behavior. |
+| `ref` | – | path/URL to a canonical ~10s reference clip — the audio anchor. |
+| `id` | – | a stable provider voice id if the ref has been cloned (e.g. an ElevenLabs id). |
 
 ### `voice.written`
 | Field | Req | Notes |

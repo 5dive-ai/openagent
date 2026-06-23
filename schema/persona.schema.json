@@ -19,7 +19,8 @@
       "properties": {
         "ref": { "type": "string" },
         "anchor": { "type": "string" },
-        "full": { "type": "string" }
+        "full": { "type": "string" },
+        "sprite": { "type": "string" }
       }
     },
     "voice": {
@@ -29,12 +30,13 @@
       "properties": {
         "audio": {
           "type": "object",
-          "required": ["provider", "name"],
+          "required": ["base"],
           "additionalProperties": false,
           "properties": {
-            "provider": { "type": "string" },
-            "name": { "type": "string" },
-            "behavior": { "type": "string" }
+            "base": { "type": "string" },
+            "style": { "type": "string" },
+            "ref": { "type": "string" },
+            "id": { "type": "string" }
           }
         },
         "written": {

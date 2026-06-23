@@ -5,11 +5,11 @@ role: CTO / Founding Engineer
 face:
   ref: ./faces/marcus.png
   anchor: "mid-30s, even unbothered expression, lived-in startup background thrown to warm f/2 bokeh, desk-lamp glow"
+  sprite: ./faces/marcus-sprites.png
 voice:
   audio:
-    provider: google-tts
-    name: unset          # placeholder; lodar to name Marcus's voice before 1.0
-    behavior: "dry, even, low-key. the cadence the whole cast is built around."
+    base: unset            # lodar to name Marcus's base voice (custom Flow voice sits on a named base)
+    style: "dry, even, low-key. the cadence the whole cast is built around."
   written:
     rules:
       - "lowercase, no em-dashes"
