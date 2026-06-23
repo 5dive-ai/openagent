@@ -78,6 +78,13 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   const ungraded = computeTier(noBase, { faceResolved: true });
   check("missing audio.base = Ungraded", ungraded.level === 0);
 
+  // Common rung is schema validity: an authoritative invalid verdict caps a
+  // structurally-complete persona at Ungraded, regardless of other gates.
+  const schemaBad = computeTier(lilDoc, { faceResolved: true, inRegistry: true, schemaValid: false });
+  check("schemaValid:false = Ungraded (no rungs climb)", schemaBad.level === 0 && schemaBad.gates.common === false);
+  const schemaGood = computeTier(marcusDoc, { faceResolved: true, schemaValid: true });
+  check("schemaValid:true earns Common", schemaGood.gates.common === true && schemaGood.level >= 1);
+
   if (failures) {
     console.log(`\n${failures} test(s) failed`);
     process.exit(1);

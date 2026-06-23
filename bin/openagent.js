@@ -119,7 +119,8 @@ async function cmdTier(args) {
   const face = await resolveFace(persona.face?.ref, path.dirname(path.resolve(file)));
   let inRegistry = false;
   if (checkRegistry) inRegistry = (await fetchRegistryIds()).has(persona.id);
-  const t = computeTier(persona, { faceResolved: face.resolved, inRegistry });
+  // We only reach here after validateFile passed above, so Common is satisfied.
+  const t = computeTier(persona, { faceResolved: face.resolved, inRegistry, schemaValid: true });
 
   if (json) {
     process.stdout.write(
