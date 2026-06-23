@@ -5,6 +5,7 @@ const path = require("path");
 const { validateFile } = require("../lib/validate");
 const { renderCard, resolveFace, fetchRegistryIds } = require("../lib/card");
 const { computeTier, TIER_STYLE } = require("../lib/tier");
+const { registryStatus } = require("../lib/registry");
 const YAML = require("yaml");
 const fs = require("fs");
 
@@ -29,6 +30,7 @@ ${bold("Usage")}
   openagent validate <persona-file> [<persona-file> ...]
   openagent card <persona-file> [-o <out.png>]
   openagent tier <persona-file> [--json]
+  openagent registry [--json] [--offline]
   openagent --help
   openagent --version
 
@@ -48,10 +50,18 @@ ${bold("tier")}
   Legendary < Mythical. Tiers 1-4 are a pure function of the persona file;
   Mythical is conferred by membership in the character-packs registry.
 
+${bold("registry")}
+  Shows the official Mythical registry the CLI ships + verifies. Mythical is
+  conferred by membership, not farmable from a persona file. The bundled
+  snapshot (founding cast) is ed25519-signed and verified against a key baked
+  into the CLI; the live character-packs index is unioned on top only if it
+  carries a valid signature. --offline skips the network.
+
 ${bold("Examples")}
   openagent validate marcus.persona.yaml
   openagent card marcus.persona.yaml -o marcus.png
   openagent tier marcus.persona.yaml --json
+  openagent registry
 `;
 
 function loadPersona(file) {
@@ -156,6 +166,34 @@ async function cmdTier(args) {
   return 0;
 }
 
+async function cmdRegistry(args) {
+  const json = args.includes("--json");
+  const offline = args.includes("--offline");
+  const s = await registryStatus({ offline });
+
+  if (json) {
+    process.stdout.write(JSON.stringify(s, null, 2) + "\n");
+    return s.verified ? 0 : 1;
+  }
+
+  if (!s.verified) {
+    process.stdout.write(`${red("✗")} bundled registry manifest failed signature verification — no Mythical conferred\n`);
+    return 1;
+  }
+  const liveNote = offline
+    ? dim(" (offline)")
+    : s.liveSigned
+    ? dim(` · live: ${s.live.length} signed`)
+    : dim(" · live: unsigned/unavailable → snapshot only");
+  process.stdout.write(
+    `${green("✓ REGISTRY")} ${dim(`signed ${s.signedAt}, snapshot of ${s.snapshotOf}`)}${liveNote}\n`
+  );
+  // Eligible = shipped snapshot ∪ verified live.
+  const eligible = [...new Set([...s.bundled, ...s.live])].sort();
+  process.stdout.write(dim(`  Mythical-eligible (${eligible.length}): `) + eligible.join(", ") + "\n");
+  return 0;
+}
+
 function cmdValidate(files) {
   if (files.length === 0) {
     process.stderr.write(red("validate: no persona file given\n\n") + USAGE);
@@ -201,6 +239,7 @@ async function main(argv) {
   if (cmd === "validate") return cmdValidate(rest);
   if (cmd === "card") return cmdCard(rest);
   if (cmd === "tier") return cmdTier(rest);
+  if (cmd === "registry") return cmdRegistry(rest);
 
   process.stderr.write(red(`unknown command: ${cmd}\n\n`) + USAGE);
   return 2;

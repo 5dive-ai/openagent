@@ -5,6 +5,8 @@ const path = require("path");
 const { validateFile, validate } = require("../lib/validate");
 const { buildSvg, resolveFace } = require("../lib/card");
 const { computeTier } = require("../lib/tier");
+const registry = require("../lib/registry");
+const crypto = require("crypto");
 const YAML = require("yaml");
 const fs = require("fs");
 
@@ -92,6 +94,31 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("validate(doc) flags a schema-invalid persona", validate(docBad).ok === false);
   const flowed = computeTier(docBad, { faceResolved: true, schemaValid: validate(docBad).ok });
   check("validate(doc) verdict flows to Ungraded", flowed.level === 0);
+
+  // 6. Signed registry — ship + verify.
+  const bundled = registry.loadBundled();
+  check("bundled manifest verifies against shipped key", bundled.verified === true);
+  check("founding cast is the signed snapshot", ["olivia", "marcus", "theo", "dario", "dude", "lilbro"].every((s) => bundled.slugs.has(s)));
+
+  // Offline → membership comes from the verified snapshot, never the network.
+  registry._reset();
+  const offlineIds = await registry.fetchRegistryIds({ offline: true });
+  check("offline ids = founding cast (no network)", offlineIds.has("marcus") && offlineIds.size === bundled.slugs.size);
+
+  // Signature actually gates trust: a slug not in the signed set is not eligible.
+  check("non-listed slug is NOT eligible", !offlineIds.has("totally-made-up-pack"));
+
+  // Tamper detection: flipping a byte of the signed payload fails verification.
+  const goodBytes = Buffer.from(JSON.stringify(bundled.manifest, null, 2), "utf8");
+  const realSig = fs.readFileSync(path.join(__dirname, "..", "registry", "manifest.sig"), "utf8");
+  check("good bytes + real sig verify", registry.verifyBytes(goodBytes, realSig) === true);
+  const tampered = Buffer.from(goodBytes.toString("utf8").replace("marcus", "hacker"), "utf8");
+  check("tampered manifest fails verification", registry.verifyBytes(tampered, realSig) === false);
+  check("a forged signature fails verification", registry.verifyBytes(goodBytes, crypto.randomBytes(64).toString("base64")) === false);
+
+  // slugsOf reads both the slim bundled shape and the full character-packs index.
+  check("slugsOf reads packs[].slug shape", registry.slugsOf({ packs: [{ slug: "a" }, { slug: "b" }] }).join() === "a,b");
+  check("slugsOf reads slugs[] shape", registry.slugsOf({ slugs: ["x", "y"] }).join() === "x,y");
 
   if (failures) {
     console.log(`\n${failures} test(s) failed`);

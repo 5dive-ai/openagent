@@ -1,7 +1,7 @@
 {
   "name": "@5dive/openagent",
-  "version": "0.3.0",
-  "description": "CLI for the OpenAgent persona spec (v0.1) — validate a persona, render a rarity-tiered trading card, and compute its tier.",
+  "version": "0.4.0",
+  "description": "CLI for the OpenAgent persona spec (v0.1) — validate a persona, render a rarity-tiered trading card, compute its tier, and verify the signed Mythical registry.",
   "bin": {
     "openagent": "bin/openagent.js"
   },
@@ -11,6 +11,7 @@
     "lib/",
     "schema/",
     "assets/",
+    "registry/",
     "SPEC.md"
   ],
   "scripts": {

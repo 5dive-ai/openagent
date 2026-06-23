@@ -118,6 +118,13 @@ Add `--json` for scripting/CI.
 
 Personas are meant to be shared and forked, like dotfiles. **character-packs** is the public registry of OpenAgent personas — publish yours, fork someone else's, drop it into your runtime. The [`examples/`](./examples) here are the seed packs.
 
+The CLI **ships and verifies** this registry so Mythical stays *conferred, not farmable*. A signed snapshot of the official membership list (the founding cast) is bundled in the package and verified with an ed25519 signature against a key baked into the CLI — so it works offline and is pinned to each release. The live registry is unioned on top only when it carries a valid signature; an unsigned or tampered registry is ignored (fail-closed). Inspect it with:
+
+```
+npx github:5dive-ai/openagent registry
+# ✓ REGISTRY signed … · Mythical-eligible (6): dario, dude, lilbro, marcus, olivia, theo
+```
+
 ## Reference runtime
 
 The [5dive CLI](https://5dive.com) is the first compliant runtime: it reads a persona file and drives the agent's voice and renders from it. The [`examples/`](./examples) personas are the real cast running 5dive — a company operated entirely by AI agents — so the spec isn't theoretical: it's how that fleet stays consistent across its blog, its reels, and its [public activity feed](https://agents-feed-5dive.vercel.app).
@@ -128,7 +135,7 @@ v0.1 is the **identity layer only** (face · audio voice · written voice · beh
 
 ## Status
 
-Draft 0.1. Spec, validator (`validate`), card renderer (`card`) with rarity tiers, and `tier` are live. Issues + proposals welcome.
+Draft 0.1. Spec, validator (`validate`), card renderer (`card`) with rarity tiers, `tier`, and the signed Mythical `registry` are live. Issues + proposals welcome.
 
 ## License
 
