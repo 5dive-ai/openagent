@@ -51,8 +51,8 @@ const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (v0.1)
 
 ${bold("Usage")}
   openagent validate <persona-file> [<persona-file> ...]
-  openagent card <persona-file> [-o <out.png>]
-  openagent card <persona-file> --animate [--format apng|gif|webp|mp4] [--frames N] [--fps N] [--width px]
+  openagent card <persona-file> [-o <out>] [--format apng|gif|webp|mp4] [--frames N] [--fps N] [--width px]
+                                            (animated by default; -o *.png or --static for a still PNG)
   openagent tier <persona-file> [--json]
   openagent registry [--json] [--offline]
   openagent speak <persona-file> "<text>" [-o <out.wav>] [--voice <name>]
@@ -73,18 +73,20 @@ ${bold("validate")}
   Exit code 0 = all valid, 1 = one or more invalid, 2 = usage/IO error.
 
 ${bold("card")}
-  Renders a shareable PNG "trading card" from a persona: avatar (face.ref),
-  a voice waveform from voice.audio (base+style), name, role, the written
-  sample, and the computed rarity tier. Writes <id>.card.png unless -o given.
+  Renders a shareable "trading card" from a persona: avatar (face.ref), a voice
+  waveform from voice.audio (base+style), name, role, the written sample, and the
+  computed rarity tier. ${bold("Animated by default")} — a plain render produces the
+  card in motion (the holo/foil sweep, glow, and rainbow speckle loop), written to
+  <id>.card.mp4 (or .apng without ffmpeg). Motion is TIER-AWARE: Common is still,
+  Rare a subtle glow breath, Epic/Legendary a gold foil sweep, Mythical the full
+  rainbow holo flow.
 
-  ${bold("--animate")} renders the card in motion (DIVE-665) — the holo/foil sweep,
-  glow, and rainbow speckle loop seamlessly. Motion is TIER-AWARE: Common is
-  still, Rare gets a subtle glow breath, Epic/Legendary a gold foil sweep,
-  Mythical the full rainbow holo flow. Formats: ${bold("apng")} (default, no extra
-  tooling — works anywhere this CLI runs), and ${bold("gif")}/${bold("webp")}/${bold("mp4")} which need
-  ffmpeg on PATH. For sharing on socials (Telegram/X/Discord) prefer ${bold("--format mp4")}:
-  it inline-plays everywhere and is the smallest. --frames (default 24),
-  --fps (default 20), --width (default 720, max 900) tune length/size.
+  Format picks itself from -o: a video extension (${bold("mp4")}/${bold("gif")}/${bold("webp")}/${bold("apng")})
+  animates; ${bold("-o <name>.png")} or ${bold("--static")} writes the still PNG that embeds
+  (avatars, READMEs, the registry). mp4/gif/webp need ffmpeg on PATH; apng is the
+  zero-dep fallback. For sharing on socials prefer mp4 — it inline-plays
+  everywhere and is the smallest. --frames (default 24), --fps (default 20),
+  --width (default 720, max 900) tune length/size.
 
 ${bold("tier")}
   Prints the computed rarity tier + completeness % + the gate breakdown.
@@ -138,9 +140,9 @@ ${bold("verify")}
 
 ${bold("Examples")}
   openagent validate marcus.persona.yaml
-  openagent card marcus.persona.yaml -o marcus.png
-  openagent card marcus.persona.yaml --animate                 # looping APNG
-  openagent card marcus.persona.yaml --format mp4 -o marcus.mp4 # for socials
+  openagent card marcus.persona.yaml                           # animated card (mp4) by default
+  openagent card marcus.persona.yaml -o marcus.png             # still PNG (for embeds)
+  openagent card marcus.persona.yaml --format gif              # pick a specific format
   openagent tier marcus.persona.yaml --json
   openagent registry
   GEMINI_API_KEY=… openagent speak marcus.persona.yaml "ship it." -o marcus.wav
@@ -160,6 +162,8 @@ async function cmdCard(args) {
   let out = null;
   let checkRegistry = true;
   let animate = false;
+  let explicitAnimate = false;     // user passed --animate / --format
+  let forceStatic = false;         // user passed --static / --png / --no-animate
   let format = null; // setting --format implies --animate
   let frames = null, fps = null, width = null;
   const positional = [];
@@ -167,12 +171,28 @@ async function cmdCard(args) {
     const a = args[i];
     if (a === "-o" || a === "--out") out = args[++i];
     else if (a === "--no-registry") checkRegistry = false;
-    else if (a === "--animate" || a === "--animated") animate = true;
-    else if (a === "--format" || a === "-f") { format = String(args[++i] || "").toLowerCase(); animate = true; }
+    else if (a === "--animate" || a === "--animated") { animate = true; explicitAnimate = true; }
+    else if (a === "--static" || a === "--png" || a === "--no-animate") forceStatic = true;
+    else if (a === "--format" || a === "-f") { format = String(args[++i] || "").toLowerCase(); animate = true; explicitAnimate = true; }
     else if (a === "--frames") frames = parseInt(args[++i], 10);
     else if (a === "--fps") fps = parseInt(args[++i], 10);
     else if (a === "--width") width = parseInt(args[++i], 10);
     else positional.push(a);
+  }
+  // Animated by default: a plain render produces the moving card — that's what
+  // people share. Fall back to a static PNG only when explicitly asked: `--static`,
+  // or an `-o` path ending in `.png` (the form embeds, avatars, and the registry
+  // use). An `-o` ending in a video extension selects that format.
+  if (forceStatic) {
+    animate = false;
+  } else if (!explicitAnimate) {
+    const lo = (out || "").toLowerCase();
+    if (lo.endsWith(".png")) animate = false;
+    else if (lo.endsWith(".mp4")) { animate = true; format = format || "mp4"; }
+    else if (lo.endsWith(".gif")) { animate = true; format = format || "gif"; }
+    else if (lo.endsWith(".webp")) { animate = true; format = format || "webp"; }
+    else if (lo.endsWith(".apng")) { animate = true; format = format || "apng"; }
+    else animate = true; // bare render, or any other ext → default to motion
   }
   if (positional.length === 0) {
     process.stderr.write(red("card: no persona file given\n\n") + USAGE);

@@ -15,6 +15,15 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-06-24 · CLI only
+### Changed — `card` is animated by default
+- A plain render (or any `-o` with a video extension) now produces the **moving**
+  card — mp4 when ffmpeg is on `PATH`, else a zero-dep apng — written to
+  `<id>.card.mp4`. A still PNG is opt-in: `-o <name>.png` or `--static`. The
+  byte-identical static path is unchanged for `.png`, so README embeds, avatars,
+  and the registry image are unaffected. Animation is what gets shared, so it's
+  the default. (DIVE-665 follow-up.)
+
 ## [0.14.0] — 2026-06-24 · CLI only
 ### Added — did:key public addresses (DIVE-668)
 - Every OpenAgent now has a portable **public address**: a `did:key` derived

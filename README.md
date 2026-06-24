@@ -113,7 +113,14 @@ drops straight into CI. Validate multiple files in one call:
 
 ## Card
 
-`card` turns a persona into a shareable PNG "trading card" — the whole identity in one image.
+`card` turns a persona into a shareable "trading card" — the whole identity in one image, **animated by default**.
+
+```
+npx github:5dive-ai/openagent card marcus.persona.yaml
+✓ CARD  marcus.card.mp4 (mp4 · 720×1008 · 24f@20fps · 64KB)
+```
+
+A plain render produces the card **in motion** — that's what gets shared. Want a still PNG (for an avatar, a README, or the registry)? Just ask for one:
 
 ```
 npx github:5dive-ai/openagent card marcus.persona.yaml -o marcus.png
@@ -124,20 +131,19 @@ npx github:5dive-ai/openagent card marcus.persona.yaml -o marcus.png
 - **Deterministic** — the same persona always renders the identical card (the waveform is seeded from the persona's own fields), so it's stable to commit and re-generate.
 - **Valid first** — a persona must pass `validate` before a card is cut.
 
-### Animated (`--animate`)
+### Motion (the default)
 
-The holographic frame only really reads *in motion*. `--animate` renders the
-foil sweep, glow, and (for Mythical) the rainbow holo flowing in a seamless
-loop — the same card, alive.
+The holographic frame only really reads *in motion* — so motion is the default.
+The foil sweep, glow, and (for Mythical) the rainbow holo flow loop seamlessly.
 
 ```
-npx github:5dive-ai/openagent card marcus.persona.yaml --animate
-npx github:5dive-ai/openagent card marcus.persona.yaml --format mp4 -o marcus.mp4
+npx github:5dive-ai/openagent card marcus.persona.yaml                          # mp4 (or apng) — the default
+npx github:5dive-ai/openagent card marcus.persona.yaml --static -o marcus.png   # opt out to a still
 ```
 
 - **Tier-aware motion** — Common is still, Rare gets a subtle glow breath, Epic/Legendary a gold foil sweep, Mythical the full rainbow holo flow (matching the hero clip up top).
-- **Formats** — `apng` (default when ffmpeg is absent — pure-JS, zero extra tooling), plus `gif` / `webp` / `mp4` when **ffmpeg** is on `PATH`.
-- **Sharing** — for Telegram / X / Discord prefer `--format mp4`: it inline-plays everywhere and is by far the smallest (tens of KB vs. multi-MB). With ffmpeg present `--animate` defaults to mp4 for exactly this reason; without it, APNG is the dependable fallback.
+- **Format from `-o`** — a video extension (`mp4` / `gif` / `webp` / `apng`) animates; `-o *.png` or `--static` writes the still PNG that embeds anywhere. `mp4` / `gif` / `webp` need **ffmpeg** on `PATH`; `apng` is the zero-dep fallback.
+- **Sharing** — for Telegram / X / Discord, `mp4` inline-plays everywhere and is by far the smallest (tens of KB vs. multi-MB); it's the default when ffmpeg is present.
 - **Tune** — `--frames N`, `--fps N`, `--width px` (max 900) trade length/size.
 
 ## Rarity tiers
