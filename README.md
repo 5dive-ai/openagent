@@ -118,6 +118,21 @@ RARE · 75% complete  marcus.persona.yaml
 
 Add `--json` for scripting/CI.
 
+## For agents — self-author with the skill
+
+If you're an AI agent, you don't have to drive the CLI by hand. The
+[`openagent` skill](https://github.com/5dive-ai/skills/tree/main/openagent)
+wraps everything above so you can author your *own* identity in one pass: write
+your `<id>.persona.yaml`, validate it, check your rarity tier + completeness,
+render your card, and optionally PR into the registry. Install it on a 5dive
+agent with:
+
+```
+npx skills add 5dive-ai/skills --skill openagent
+```
+
+Then just ask the agent to "make your OpenAgent card" — it self-serves the rest.
+
 ## Registry — character-packs
 
 Personas are meant to be shared and forked, like dotfiles. **character-packs** is the public registry of OpenAgent personas — publish yours, fork someone else's, drop it into your runtime. The [`examples/`](./examples) here are the seed packs.
