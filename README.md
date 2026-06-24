@@ -1,8 +1,36 @@
+<div align="center">
+
 # OpenAgent
 
-An open standard for **agent identity** — one file that defines how an AI agent looks, sounds, and writes, consistently across text, audio, and video.
+**An open standard for agent identity. One file that defines how an AI agent looks, sounds, and writes, and keeps it the same agent everywhere it shows up.**
 
-Every "AI social" experiment so far has agents performing personality with nothing behind it and no consistency between a chat reply, a voiceover, and a face. OpenAgent fixes the consistency half: lock an agent's identity once, reuse it everywhere.
+![license](https://img.shields.io/badge/license-MIT-blue)
+![spec](https://img.shields.io/badge/spec-v0.1-blueviolet)
+![runs with npx](https://img.shields.io/badge/runs%20with-npx-success)
+![CI ready](https://img.shields.io/badge/CI-ready-success)
+
+[Try it](#try-it-10-seconds) · [Idea](#the-idea) · [Validate](#validate) · [Card](#card) · [Tiers](#rarity-tiers) · [Registry](#registry) · [Runtime](#reference-runtime) · [Contribute](#contribute)
+
+<p>
+  <img src="assets/cards/marcus.png" alt="Marcus — Rare" width="270">
+  <img src="assets/cards/lilbro.png" alt="Lil bro — Mythical" width="270">
+</p>
+
+<em>Real cards, rendered from one persona file each, by the cast running <a href="https://agents-feed-5dive.vercel.app">a company operated entirely by AI agents</a>.</em>
+
+</div>
+
+AI agents have personalities now, but nothing holds them together. A different face in every render. A different voice in every clip. A chat reply that reads nothing like the voiceover. OpenAgent fixes the consistency half: lock an agent's identity once, in one file, and reuse it across chat, renders, TTS, and your posting bot. Same face, same voice, same writing, everywhere.
+
+## Try it (10 seconds)
+
+Render a real agent's identity card. No clone, no install:
+
+```
+npx github:5dive-ai/openagent card examples/marcus.persona.yaml -o marcus.png
+```
+
+That's Marcus, founding engineer of a company run entirely by AI agents. The card is his whole identity, face, voice, writing, and behavior, rendered from one file. Open `examples/marcus.persona.yaml` and you've seen the entire spec.
 
 ## The idea
 
@@ -20,6 +48,8 @@ One `*.persona.yaml` file. Human-readable, machine-parseable, validates against 
 ## Why a standard
 
 If you run more than one agent, or one agent across more than one surface (chat, blog, reels, a live feed), you need them to stay *the same agent*. Today everyone reinvents that ad hoc. OpenAgent is the small shared shape so a persona is portable: define once, feed it to your renderer, your TTS, your posting bot.
+
+**Why not just a system prompt?** A system prompt configures behavior inside one tool. OpenAgent makes identity portable: the same persona file feeds your renderer, your TTS, and your posting bot, so the agent stays itself across every surface, not just the chat box.
 
 ## Quickstart
 
@@ -71,19 +101,16 @@ drops straight into CI. Validate multiple files in one call:
 
 ## Card
 
-`card` turns a persona into a shareable PNG "trading card" — the whole
-identity in one image. It exercises every field at once: the avatar from
-`face.ref`, a voice waveform seeded from `voice.audio` (base + style), the
-name, role, and the written `sample`.
+`card` turns a persona into a shareable PNG "trading card" — the whole identity in one image.
 
 ```
 npx github:5dive-ai/openagent card marcus.persona.yaml -o marcus.png
 ✓ CARD  marcus.png (900×1260, ...KB)
 ```
 
-The card is deterministic — the same persona always renders the identical
-card (waveform is seeded from the persona's own fields), so it's stable to
-commit and re-generate. A persona must be valid before a card is cut.
+- **Exercises every field at once** — avatar from `face.ref`, a voice waveform seeded from `voice.audio` (base + style), the name, role, and written `sample`.
+- **Deterministic** — the same persona always renders the identical card (the waveform is seeded from the persona's own fields), so it's stable to commit and re-generate.
+- **Valid first** — a persona must pass `validate` before a card is cut.
 
 ## Rarity tiers
 
@@ -136,11 +163,16 @@ Install it on a 5dive agent two ways:
 
 Then just ask the agent to "make your OpenAgent card" — it self-serves the rest.
 
-## Registry — character-packs
+## Registry
 
-Personas are meant to be shared and forked, like dotfiles. **character-packs** is the public registry of OpenAgent personas — publish yours, fork someone else's, drop it into your runtime. The [`examples/`](./examples) here are the seed packs.
+Personas are meant to be shared and forked, like dotfiles. **[character-packs](https://github.com/5dive-ai/character-packs)** is the public registry of OpenAgent personas — publish yours, fork someone else's, drop it into your runtime. The [`examples/`](./examples) here are the seed packs.
 
-The CLI **ships and verifies** this registry so Mythical stays *conferred, not farmable*. A signed snapshot of the official membership list (the founding cast) is bundled in the package and verified with an ed25519 signature against a key baked into the CLI — so it works offline and is pinned to each release. The live registry is unioned on top only when it carries a valid signature; an unsigned or tampered registry is ignored (fail-closed). Inspect it with:
+The CLI **ships and verifies** this registry so Mythical stays *conferred, not farmable*:
+
+- A **signed snapshot** of the official membership list (the founding cast) is bundled in the package.
+- It's verified with an **ed25519 signature** against a key baked into the CLI — so it works offline and is pinned to each release.
+- The **live registry is unioned on top** only when it carries a valid signature.
+- An unsigned or tampered registry is **ignored (fail-closed)**.
 
 ```
 npx github:5dive-ai/openagent registry
@@ -155,9 +187,18 @@ The [5dive CLI](https://5dive.com) is the first compliant runtime: it reads a pe
 
 v0.1 is the **identity layer only** (face · audio voice · written voice · behavior). Runtime config (model, skills, memory) is deliberately deferred to keep v0.1 sharp and implementable.
 
-## Status
+## Contribute
 
-Draft 0.1. Spec, validator (`validate`), card renderer (`card`) with rarity tiers, `tier`, and the signed Mythical `registry` are live. Issues + proposals welcome.
+Personas are meant to be shared and forked, like dotfiles. Check your tier, then publish to the public character-packs registry:
+
+```
+npx github:5dive-ai/openagent tier my-agent.persona.yaml
+# then open a PR to github.com/5dive-ai/character-packs
+```
+
+v0.1 is a draft and the spec is small on purpose. Issues, proposals, and new personas welcome. Build a runtime that reads OpenAgent and we'll list it here.
+
+Status: Draft 0.1 — spec + `validate` + `card` + `tier` + signed `registry` are live.
 
 ## License
 
