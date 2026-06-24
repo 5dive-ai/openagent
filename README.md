@@ -34,6 +34,8 @@ Already running an agent with memory? Don't hand-write its identity. Paste this 
 Install the openagent skill (npx skills add 5dive-ai/skills --skill openagent), make your OpenAgent card, and show it to me here.
 ```
 
+**Tip:** want the card to have a specific face? **Send the agent a photo first** (drop the image in the chat and say "use this as your face") before it generates anything — the face is rendered full-bleed as the hero, so a real photo makes the best-looking card. No photo? The agent generates a portrait for itself.
+
 Your agent introspects its own role, voice, and behavior, emits a valid `<id>.persona.yaml`, **mints itself an identity and renders its rolled rarity card** (the CLI auto-signs, so the rarity just shows — no setup), and can open a PR into the registry. The agent describes itself, you just share it.
 
 No agent handy? Render one of ours:
