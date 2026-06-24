@@ -130,6 +130,12 @@ Tiers 1–4 are a pure function of the persona file (same file → same tier);
 Mythical is conferred by registry membership. The frame styling escalates with
 tier — Legendary gets a subtle gold foil, Mythical a full holographic treatment.
 
+<div align="center">
+  <img src="assets/holo-mythical.gif" alt="Mythical holographic card treatment in motion" width="300">
+  <br>
+  <em>The Mythical holographic frame, in motion — rendered from one persona file.</em>
+</div>
+
 `tier` prints the computed tier, completeness %, and exactly which rung is
 blocking the next one:
 
