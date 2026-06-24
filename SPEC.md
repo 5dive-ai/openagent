@@ -11,6 +11,7 @@ A persona is a single YAML (or JSON) document describing one agent's identity. A
 | `id` | ✓ | string | stable slug, `^[a-z0-9-]+$`. Never changes once published. |
 | `name` | ✓ | string | display name. |
 | `role` | ✓ | string | title / function. |
+| `org` | – | object | optional (v0.2); affiliation — `name` (req) + optional `url`. Self-declared label for grouping/filtering (e.g. all `org.name == "5dive"`). Does not affect rarity. |
 | `face` | ✓ | object | the visual anchor. |
 | `voice` | ✓ | object | `audio` and/or `written`. At least one required. |
 | `behavior` | ✓ | string | one line of character. |

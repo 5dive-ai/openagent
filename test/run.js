@@ -91,42 +91,67 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
     return fcTL === 3 && fdAT >= 2;
   })());
 
-  // 5. Rarity ladder.
-  const marcusTier = computeTier(marcusDoc, { faceResolved: true, inRegistry: false });
-  check("marcus = Rare (base unset blocks Epic)", marcusTier.tier === "Rare" && marcusTier.level === 2);
+  // 5. Rarity — identity-seeded random (v0.2), NOT completeness-earned.
+  const KEY = "did:key:z6MkExampleSeedAAAA";
+  const r1 = computeTier(marcusDoc, { didKey: KEY, schemaValid: true });
+  const r2 = computeTier(marcusDoc, { didKey: KEY, schemaValid: true });
+  check("rarity is deterministic per identity (same did:key → same tier)",
+    r1.tier === r2.tier && r1.level === r2.level);
+  check("a graded roll lands in Common..Legendary, gates.graded=true",
+    ["Common", "Rare", "Epic", "Legendary"].includes(r1.tier) && r1.gates.graded === true);
 
-  const lilTier = computeTier(lilDoc, { faceResolved: true, inRegistry: false });
-  check("lilbro = Legendary (fully specified)", lilTier.tier === "Legendary" && lilTier.level === 4);
+  // The seed is the did:key, NOT the user-chosen id — renaming can't re-roll.
+  const renamed = JSON.parse(JSON.stringify(marcusDoc));
+  renamed.id = "totally-different-id";
+  check("renaming id does not change rarity (seed = did:key, not id)",
+    computeTier(renamed, { didKey: KEY, schemaValid: true }).tier === r1.tier);
+  // A different identity can roll a different tier.
+  check("a different did:key is an independent roll",
+    typeof computeTier(marcusDoc, { didKey: "did:key:z6MkOther", schemaValid: true }).tier === "string");
 
-  const lilMyth = computeTier(lilDoc, { faceResolved: true, inRegistry: true });
-  check("lilbro + registry = Mythical", lilMyth.tier === "Mythical" && lilMyth.level === 5);
+  // Entry rule: must be schema-valid AND have an identity key to be graded.
+  check("no identity key → Ungraded (even if schema-valid)",
+    computeTier(marcusDoc, { schemaValid: true }).tier === "Ungraded");
+  check("Ungraded has gates.graded=false",
+    computeTier(marcusDoc, { schemaValid: true }).gates.graded === false);
+  check("schemaValid:false → Ungraded (even with an identity key)",
+    computeTier(marcusDoc, { didKey: KEY, schemaValid: false }).tier === "Ungraded");
 
-  const marcusNoFace = computeTier(marcusDoc, { faceResolved: false, inRegistry: false });
-  check("unresolved face drops to Common", marcusNoFace.tier === "Common" && marcusNoFace.level === 1);
+  // Mythical is conferred by the curated registry, never rolled.
+  const lilMyth = computeTier(marcusDoc, { didKey: KEY, inRegistry: true, schemaValid: true });
+  check("inRegistry → Mythical (conferred)", lilMyth.tier === "Mythical" && lilMyth.level === 5);
 
-  check("completeness is a percentage", marcusTier.completeness > 0 && marcusTier.completeness <= 100);
-  check("more-complete persona scores higher", lilTier.completeness > marcusTier.completeness);
+  // Real signed persona: its tier derives from its own provenance.created_by.key.
+  const opsSigned = load(path.join(examples, "marcus-ops.persona.yaml"));
+  check("a signed persona is graded via its own did:key",
+    computeTier(opsSigned, { faceResolved: true, schemaValid: true }).tier !== "Ungraded");
 
-  // Missing audio.base entirely → fails Common gate → Ungraded.
-  const noBase = JSON.parse(JSON.stringify(marcusDoc));
-  delete noBase.voice.audio;
-  const ungraded = computeTier(noBase, { faceResolved: true });
-  check("missing audio.base = Ungraded", ungraded.level === 0);
+  // Distribution: over many identities, ≈ 60/25/11/4 (tolerance for sampling).
+  (() => {
+    const N = 4000;
+    const c = { Common: 0, Rare: 0, Epic: 0, Legendary: 0 };
+    for (let i = 0; i < N; i++) {
+      c[computeTier(marcusDoc, { didKey: "did:key:z6Mk" + i, schemaValid: true }).tier]++;
+    }
+    const pct = (k) => c[k] / N;
+    check("distribution ≈ Common 60%", Math.abs(pct("Common") - 0.6) < 0.04);
+    check("distribution ≈ Rare 25%", Math.abs(pct("Rare") - 0.25) < 0.04);
+    check("distribution ≈ Epic 11%", Math.abs(pct("Epic") - 0.11) < 0.03);
+    check("distribution ≈ Legendary 4%", Math.abs(pct("Legendary") - 0.04) < 0.02);
+  })();
 
-  // Common rung is schema validity: an authoritative invalid verdict caps a
-  // structurally-complete persona at Ungraded, regardless of other gates.
-  const schemaBad = computeTier(lilDoc, { faceResolved: true, inRegistry: true, schemaValid: false });
-  check("schemaValid:false = Ungraded (no rungs climb)", schemaBad.level === 0 && schemaBad.gates.common === false);
-  const schemaGood = computeTier(marcusDoc, { faceResolved: true, schemaValid: true });
-  check("schemaValid:true earns Common", schemaGood.gates.common === true && schemaGood.level >= 1);
+  check("completeness is a percentage", r1.completeness > 0 && r1.completeness <= 100);
+  check("more-complete persona scores higher",
+    computeTier(lilDoc, { didKey: KEY, schemaValid: true }).completeness >
+      computeTier(marcusDoc, { didKey: KEY, schemaValid: true }).completeness);
 
-  // Doc-level validate(doc) mirrors validateFile and feeds computeTier directly.
+  // Doc-level validate(doc) still gates grading: schema-invalid → Ungraded.
   check("validate(doc) passes a good persona", validate(marcusDoc).ok === true);
   const docBad = JSON.parse(JSON.stringify(marcusDoc));
   delete docBad.behavior; // schema-required
   check("validate(doc) flags a schema-invalid persona", validate(docBad).ok === false);
-  const flowed = computeTier(docBad, { faceResolved: true, schemaValid: validate(docBad).ok });
-  check("validate(doc) verdict flows to Ungraded", flowed.level === 0);
+  const flowed = computeTier(docBad, { didKey: KEY, schemaValid: validate(docBad).ok });
+  check("schema-invalid verdict → Ungraded", flowed.level === 0 && flowed.tier === "Ungraded");
 
   // 5b. Collectible badges — orthogonal to the rarity ladder (DIVE-654).
   const opsDocB = load(path.join(examples, "marcus-ops.persona.yaml"));
@@ -155,14 +180,14 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("signed badge respects ctx.signatureValid=false",
     !computeBadges(opsDocB, { signatureValid: false }).some((b) => b.key === "signed"));
 
-  // Next-rung hints: the single rung to chase, or null at the top.
-  const nrMarcus = nextRung(computeTier(marcusDoc, { faceResolved: true }), true);
-  check("next rung above Rare is Epic", nrMarcus && nrMarcus.label === "Epic" && /voice base/.test(nrMarcus.need));
-  const nrUnresolved = nextRung(computeTier(marcusDoc, { faceResolved: false }), false);
-  check("unresolved-face Rare hint points at face.ref", nrUnresolved.label === "Rare" && /face\.ref/.test(nrUnresolved.need));
-  const nrLil = nextRung(computeTier(lilDoc, { faceResolved: true }), true);
-  check("next rung above Legendary is Mythical", nrLil && nrLil.label === "Mythical");
-  check("Mythical has no next rung", nextRung(lilMyth, true) === null);
+  // Progression hint: get graded (if Ungraded) or climb to Mythical; null at top.
+  const nrUngraded = nextRung(computeTier(marcusDoc, { schemaValid: true }));
+  check("Ungraded persona is told to validate + sign",
+    nrUngraded && nrUngraded.goal === "graded" && /sign/.test(nrUngraded.need));
+  const nrGraded = nextRung(computeTier(marcusDoc, { didKey: KEY, schemaValid: true }));
+  check("a graded persona's only climb is Mythical",
+    nrGraded && nrGraded.label === "Mythical" && /registry/.test(nrGraded.need));
+  check("Mythical has no next goal", nextRung(lilMyth) === null);
 
   // face.recipe — optional regenerable likeness, additive + back-compat (DIVE-649).
   const withRecipe = JSON.parse(JSON.stringify(marcusDoc));
@@ -212,6 +237,25 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
 
   // The shipped marcus example carries a real ext block and still validates.
   check("marcus example ext.fivedive present", marcusDoc.ext && marcusDoc.ext.fivedive.dashboard_pinned === true);
+
+  // org — optional affiliation for grouping/filtering, additive + inert for rarity.
+  check("persona without org validates (back-compat)", validate(baseNoExt).ok === true);
+  const withOrg = JSON.parse(JSON.stringify(marcusDoc));
+  withOrg.org = { name: "5dive", url: "https://5dive.ai" };
+  check("org { name, url } validates", validate(withOrg).ok === true);
+  const orgNameOnly = JSON.parse(JSON.stringify(marcusDoc));
+  orgNameOnly.org = { name: "5dive" };
+  check("org with name only validates (url optional)", validate(orgNameOnly).ok === true);
+  const orgNoName = JSON.parse(JSON.stringify(marcusDoc));
+  orgNoName.org = { url: "https://x.test" };
+  check("org requires name", validate(orgNoName).ok === false);
+  const orgScalar = JSON.parse(JSON.stringify(marcusDoc));
+  orgScalar.org = "5dive";
+  check("org must be an object (bare string rejected)", validate(orgScalar).ok === false);
+  check("org does not affect rarity",
+    computeTier(withOrg, { didKey: KEY, schemaValid: true }).tier ===
+      computeTier(marcusDoc, { didKey: KEY, schemaValid: true }).tier);
+  check("lilbro example carries org.name = 5dive", lilDoc.org && lilDoc.org.name === "5dive");
 
   // links — identity layer points at the capability layer via agent_card (DIVE-653).
   // OpenAgent describes who an agent IS; the linked A2A AgentCard describes what it
@@ -326,10 +370,19 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   const opsVerdict = provenance.verifyPersona(opsDoc);
   check("marcus-ops example signature verifies", opsVerdict.signed === true && opsVerdict.ok === true);
   check("marcus-ops declares derived_from marcus", opsDoc.provenance.derived_from[0].id === "marcus");
-  // Provenance is independent of the rarity ladder — adding it changes no tier.
+  // v0.2: the identity KEY (provenance.created_by.key) is the rarity seed, so it
+  // does drive the tier — but only via the key. Stripping all provenance (no
+  // key) drops to Ungraded; the signature/lineage fields never move the roll.
   const opsBase = JSON.parse(JSON.stringify(opsDoc));
   delete opsBase.provenance;
-  check("provenance does not affect computed tier", computeTier(opsDoc, { faceResolved: true }).tier === computeTier(opsBase, { faceResolved: true }).tier);
+  check("removing the identity key → Ungraded",
+    computeTier(opsBase, { faceResolved: true, schemaValid: true }).tier === "Ungraded");
+  const opsNoSig = JSON.parse(JSON.stringify(opsDoc));
+  delete opsNoSig.provenance.signature;
+  if (opsNoSig.provenance.derived_from) delete opsNoSig.provenance.derived_from;
+  check("signature/lineage don't move the roll (same key → same tier)",
+    computeTier(opsNoSig, { faceResolved: true, schemaValid: true }).tier ===
+      computeTier(opsDoc, { faceResolved: true, schemaValid: true }).tier);
 
   // 8b. did:key public address (DIVE-668) — portable, verifiable agent address.
   // base58btc encoder against the canonical "hello world" vector.

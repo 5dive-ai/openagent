@@ -148,48 +148,57 @@ npx github:5dive-ai/openagent card marcus.persona.yaml --static -o marcus.png   
 
 ## Rarity tiers
 
-Every card carries a **rarity tier** — a gate ladder where you earn the
-highest tier whose gates *all* pass. It rewards a fully-specified persona and
-turns "how complete is this identity?" into one glanceable badge + frame.
+Every card carries a **rarity tier**, and rarity is the game. It is **rolled
+from your agent's identity** — the `did:key` derived from your signing key — so
+it's random, permanent, and **unfarmable**: one identity, one rarity, forever.
+You can't fill in more fields to rank up, and you can't re-roll without minting a
+whole new identity. That's what makes a rare card worth sharing.
 
-| Tier | Earns it |
-|------|----------|
-| **Common** | schema-valid + `voice.audio.base` + `written.sample` present |
-| **Rare** | + `face.ref` resolves to a real image + the sample isn't a stub |
-| **Epic** | + a *named* voice base (not the literal `unset`) + `behavior` |
-| **Legendary** | + `voice.style` + face `anchor` & `sprite` + `links` + `posts_about` (fully specified) |
-| **Mythical** | Legendary **and** the id is listed in the official [character-packs](https://github.com/5dive-ai/character-packs) registry — *conferred, not farmable* |
+| Tier | Odds | How you get it |
+|------|------|----------------|
+| **Common** | 60% | rolled from your `did:key` |
+| **Rare** | 25% | rolled from your `did:key` |
+| **Epic** | 11% | rolled from your `did:key` |
+| **Legendary** | 4% | rolled from your `did:key` |
+| **Mythical** | — | **conferred, never rolled**: accepted into the official [character-packs](https://github.com/5dive-ai/character-packs) registry (curated + cryptographically signed) |
 
-Tiers 1–4 are a pure function of the persona file (same file → same tier);
-Mythical is conferred by registry membership. The frame styling escalates with
-tier — Legendary gets a subtle gold foil; Mythical earns a full holographic
-treatment that only reads in motion (see the card animating up top, with the
-Common→Legendary cast in static beneath it).
+Two rules make it real:
 
-`tier` prints the computed tier, completeness %, and exactly which rung is
-blocking the next one:
+- **Your rarity is your identity.** Same `did:key` → same tier, always and
+  forever — it never changes. To be graded at all, a persona must be schema-valid
+  **and signed**; an unsigned file is *Ungraded*. Signing is what mints your
+  permanent roll, so the roll can't be farmed by editing an unsigned file.
+- **Mythical is the only tier you climb to — and only by being chosen.** It's
+  conferred by acceptance into the signed registry, not earned by stats and not
+  forgeable. Everything else is your birth roll.
+
+Completeness and **badges** (below) are a *separate* axis: they reward a
+fully-specified persona without ever touching your tier. The frame styling
+escalates with tier — Legendary gets a gold foil; Mythical earns the full
+holographic treatment that only reads in motion (see the card animating up top).
+
+`tier` prints your rolled rarity, completeness %, and the one thing you can still
+climb to:
 
 ```
-npx github:5dive-ai/openagent tier marcus.persona.yaml
-RARE · 75% complete  marcus.persona.yaml
-  ✓ Common
-  ✓ Rare
-  ✗ Epic — needs named voice base (not 'unset') + behavior
-  🔒 Legendary
-  🔒 Mythical
+npx github:5dive-ai/openagent tier marcus-ops.persona.yaml
+RARE · 63% complete  marcus-ops.persona.yaml
+  ✓ Rare — rolled from your did:key. Permanent; it never changes.
+  ↑ only climb: Mythical — get accepted into the curated character-packs registry (raise completeness + collect badges meanwhile)
+  🎖  badges: signed, remixed
 ```
 
 Add `--json` for scripting/CI.
 
-`validate` now shows the same tier + next-rung hint inline (offline — it never
-probes the registry), so a single pass tells you whether the file is legal
-*and* exactly what to add to climb:
+`validate` shows the same tier + next-goal hint inline (offline — it never probes
+the registry), so a single pass tells you whether the file is legal *and* where
+it stands:
 
 ```
-npx github:5dive-ai/openagent validate marcus.persona.yaml
-✓ PASS  marcus.persona.yaml (id: marcus) — RARE · 75% complete
-        ↑ next: Epic — add a named voice base (voice.audio.base, not 'unset') + behavior
-        🎖  badges: sprite-sheet, face-recipe
+npx github:5dive-ai/openagent validate marcus-ops.persona.yaml
+✓ PASS  marcus-ops.persona.yaml (id: marcus-ops) — RARE · 63% complete
+        ↑ next: Mythical — get accepted into the curated character-packs registry (raise completeness + collect badges meanwhile)
+        🎖  badges: signed, remixed
 ```
 
 ### Badges — orthogonal to tier

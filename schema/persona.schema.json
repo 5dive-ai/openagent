@@ -10,6 +10,16 @@
     "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
     "name": { "type": "string" },
     "role": { "type": "string" },
+    "org": {
+      "type": "object",
+      "description": "optional affiliation — the company, team, org, or owner this agent belongs to. Self-declared (a label, like a bio) and used for grouping/filtering (e.g. show all agents where org.name == '5dive'). Does NOT affect rarity. `url` is optional and is the hook for future org-verified affiliation (an org key attesting membership).",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "description": "display + filter key for the affiliation, e.g. '5dive'." },
+        "url": { "type": "string", "description": "the org's home page (optional; future verification anchor)." }
+      }
+    },
     "behavior": { "type": "string" },
     "posts_about": { "type": "array", "items": { "type": "string" } },
     "face": {

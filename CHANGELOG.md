@@ -15,6 +15,26 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-06-24 · CLI + spec
+### Changed — rarity is rolled from identity, not earned by completeness (spec + CLI)
+- Base tiers (Common..Legendary) are now a deterministic **random roll seeded by
+  the persona's `did:key`** (its ed25519 identity), at fixed odds 60/25/11/4 —
+  permanent and unfarmable, replacing the old completeness gate-ladder. The only
+  way to a different roll is to mint a whole new identity.
+- Entry rule: a persona must be schema-valid **and signed** (have an identity
+  key) to be graded; otherwise it is *Ungraded*. Completeness + badges stay a
+  **separate** axis that never moves the tier.
+- Mythical is unchanged: conferred by acceptance into the signed character-packs
+  registry, never rolled.
+- `tier` / `validate` output updated for the new model (rolled tier + the single
+  conferred climb to Mythical). `computeTier` reads `ctx.didKey` (or derives it
+  from `provenance.created_by.key`); `nextRung`/`rungNeeds` repurposed.
+
+### Added — `org` affiliation field (spec, additive + back-compat)
+- Optional top-level `org` object (`name` required, `url` optional): self-declared
+  affiliation for grouping/filtering (e.g. all `org.name == "5dive"`). Does **not**
+  affect rarity. `url` is the anchor for future org-verified affiliation.
+
 ## [0.15.0] — 2026-06-24 · CLI only
 ### Changed — `card` is animated by default
 - A plain render (or any `-o` with a video extension) now produces the **moving**

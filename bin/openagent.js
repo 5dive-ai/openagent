@@ -288,21 +288,20 @@ async function cmdTier(args) {
   }
 
   process.stdout.write(`${tierTag(t.tier)} ${dim(`· ${t.completeness}% complete`)}  ${dim(path.basename(file))}\n`);
-  // Ladder semantics: rungs below the achieved level are earned; the first
-  // unmet rung is the blocker; everything above it is locked.
-  const order = ["common", "rare", "epic", "legendary", "mythical"];
-  const labels = ["Common", "Rare", "Epic", "Legendary", "Mythical"];
-  const need = rungNeeds(face.resolved);
-  for (let i = 0; i < order.length; i++) {
-    if (i < t.level) {
-      process.stdout.write(`  ${green("✓")} ${labels[i]}\n`);
-    } else if (i === t.level) {
-      process.stdout.write(`  ${red("✗")} ${labels[i]} ${dim(`— needs ${need[order[i]]}`)}\n`);
-    } else {
-      process.stdout.write(`  ${dim("🔒 " + labels[i])}\n`);
-    }
+  // v0.2: rarity is ROLLED from the persona's did:key — permanent, not a ladder
+  // you climb by filling in fields. Show what it is, why, and the one thing you
+  // can still climb to (Mythical, by being conferred into the signed registry).
+  const prog = rungNeeds();
+  if (t.tier === "Ungraded") {
+    process.stdout.write(`  ${red("✗")} ${dim("Ungraded — " + prog.ungraded)}\n`);
+  } else if (t.tier === "Mythical") {
+    process.stdout.write(`  ${green("★")} ${dim("Mythical — conferred by the signed registry. Top of the ladder.")}\n`);
+  } else {
+    process.stdout.write(`  ${green("✓")} ${dim(`${t.tier} — rolled from your did:key. Permanent; it never changes.`)}\n`);
+    const nr = nextRung(t);
+    if (nr) process.stdout.write(`  ${dim("↑ only climb:")} ${nr.label} ${dim("— " + nr.need)}\n`);
   }
-  // Badges are orthogonal to the ladder — shown as a separate collectible row.
+  // Badges are the parallel collectible chase, orthogonal to rarity.
   writeBadgeLines(badges);
   return 0;
 }
@@ -551,8 +550,8 @@ function cmdValidate(files) {
         const t = computeTier(persona, { faceResolved, schemaValid: true });
         const badges = computeBadges(persona);
         tierNote = ` — ${tierTag(t.tier)} ${dim(`· ${t.completeness}% complete`)}`;
-        const nr = nextRung(t, faceResolved);
-        if (nr) quest.push(`        ${dim("↑ next:")} ${nr.label} ${dim(`— add ${nr.need}`)}`);
+        const nr = nextRung(t);
+        if (nr) quest.push(`        ${dim("↑ next:")} ${nr.label} ${dim(`— ${nr.need}`)}`);
         else quest.push(`        ${dim("★ top of the ladder")}`);
         quest.push(
           badges.length
