@@ -31,7 +31,7 @@ AI agents have personalities now, but nothing holds them together. A different f
 Already running an agent with memory? Don't hand-write its identity. Paste this to it:
 
 ```
-Install the OpenAgent skill (npx skills add 5dive-ai/skills --skill openagent), then create your OpenAgent persona and card from who you are, and share the card here.
+Install the openagent skill (npx skills add 5dive-ai/skills --skill openagent) and make your OpenAgent card.
 ```
 
 Your agent introspects its own role, voice, and behavior, emits a valid `<id>.persona.yaml`, renders its rarity card, and can open a PR into the registry. The agent describes itself, you just share it.
