@@ -83,11 +83,14 @@ ${bold("card")}
 
   Format picks itself from -o: a video extension (${bold("mp4")}/${bold("gif")}/${bold("webp")}/${bold("apng")})
   animates; ${bold("-o <name>.png")} or ${bold("--static")} writes the still PNG that embeds
-  (avatars, READMEs, the registry). mp4/gif/webp need ffmpeg on PATH; apng is the
-  zero-dep fallback. For sharing on socials prefer mp4 — it inline-plays
-  everywhere and is the smallest. The holo makes one calm pass then rests (~6s
-  loop). --frames (default 90 @ --fps 15; apng 30 @ fps 5 since it can't delta-
-  compress the static rest), --width (default 720, max 900) tune length/size.
+  (avatars, READMEs, the registry); ${bold("-o <name>.svg")} writes the vector card.
+  PNG/animation use the optional ${bold("@resvg/resvg-js")} rasterizer — if it isn't
+  installed, use ${bold("-o <name>.svg")} (no rasterizer needed) or ${bold("npm i @resvg/resvg-js")}.
+  mp4/gif/webp also need ffmpeg on PATH; apng is the zero-dep raster fallback. For
+  sharing on socials prefer mp4 — it inline-plays everywhere and is the smallest.
+  The holo makes one calm pass then rests (~6s loop). --frames (default 90 @ --fps
+  15; apng 30 @ fps 5 since it can't delta-compress the static rest), --width
+  (default 720, max 900) tune length/size.
   On the animated render an ${bold("UNSIGNED")} persona is auto-given an identity (a
   keypair is minted, the persona signed in place, the private key saved beside it
   as <id>.key — keep it secret, never commit it) so the card shows a real ROLLED
@@ -227,6 +230,7 @@ async function cmdCard(args) {
   } else if (!explicitAnimate) {
     const lo = (out || "").toLowerCase();
     if (lo.endsWith(".png")) animate = false;
+    else if (lo.endsWith(".svg")) animate = false; // vector, resvg-free
     else if (lo.endsWith(".mp4")) { animate = true; format = format || "mp4"; }
     else if (lo.endsWith(".gif")) { animate = true; format = format || "gif"; }
     else if (lo.endsWith(".webp")) { animate = true; format = format || "webp"; }

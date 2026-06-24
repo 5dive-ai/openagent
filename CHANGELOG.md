@@ -15,6 +15,21 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-06-24 · CLI
+### Changed — `@resvg/resvg-js` is now an OPTIONAL dependency (lighter install)
+- The native rasterizer is needed ONLY to turn the card SVG into a PNG/animated
+  card. It's been moved from `dependencies` to `optionalDependencies` and is
+  lazy-loaded only on the raster paths, so `validate` / `tier` / `sign` / `verify`
+  and SVG generation install and run with zero native deps — a faster, more
+  portable `npx @5dive/openagent`.
+- New vector output: `card <persona> -o <name>.svg` writes the card SVG directly
+  (no rasterizer). So even without `@resvg/resvg-js` you can still produce a card.
+- If a PNG/animated render is requested and the rasterizer isn't installed, the
+  CLI prints a clear message ("install @resvg/resvg-js, or output .svg") instead
+  of hard-crashing at startup.
+- No behavior change when `@resvg/resvg-js` is present (it ships as an optional
+  dep, so a normal `npm i` still installs it).
+
 ## [0.17.0] — 2026-06-24 · CLI
 ### Added — `card` auto-mints an identity so rarity always shows
 - Under the v0.2 model a tier only rolls once a persona is signed (rarity is
