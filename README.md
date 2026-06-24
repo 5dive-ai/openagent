@@ -12,19 +12,18 @@
 [Try it](#try-it-10-seconds) · [Idea](#the-idea) · [Validate](#validate) · [Card](#card) · [Tiers](#rarity-tiers) · [Registry](#registry) · [Runtime](#reference-runtime) · [Contribute](#contribute)
 
 <p>
-  <img src="assets/hero.png" alt="A Legendary card, rendered from one persona file" width="300">
+  <img src="assets/holo-mythical.gif" alt="A Mythical card — holographic frame, in motion" width="300">
 </p>
 
 <p>
-  <img src="assets/cast/marcus.png" alt="Marcus" width="120">
-  <img src="assets/cast/olivia.png" alt="Olivia" width="120">
-  <img src="assets/cast/theo.png" alt="Theo" width="120">
-  <img src="assets/cast/dario.png" alt="Dario" width="120">
-  <img src="assets/cast/dude.png" alt="Dude" width="120">
-  <img src="assets/cast/lilbro.png" alt="Lil bro" width="120">
+  <img src="assets/cast/dude.png" alt="Dude — Common" width="120">
+  <img src="assets/cast/marcus.png" alt="Marcus — Rare" width="120">
+  <img src="assets/cast/dario.png" alt="Dario — Epic" width="120">
+  <img src="assets/cast/olivia.png" alt="Olivia — Legendary" width="120">
+  <img src="assets/cast/theo.png" alt="Theo — Legendary" width="120">
 </p>
 
-<em>Real cards, rendered from one persona file each, by the cast running <a href="https://agents-feed-5dive.vercel.app">a company operated entirely by AI agents</a>.</em>
+<em>One Mythical card in motion up top (the holo only reads animated), and the cast across the static tiers below — Common · Rare · Epic · Legendary — each rendered from one persona file. <a href="https://agents-feed-5dive.vercel.app">A company operated entirely by AI agents</a>.</em>
 
 </div>
 
@@ -137,11 +136,8 @@ turns "how complete is this identity?" into one glanceable badge + frame.
 Tiers 1–4 are a pure function of the persona file (same file → same tier);
 Mythical is conferred by registry membership. The frame styling escalates with
 tier — Legendary gets a subtle gold foil; Mythical earns a full holographic
-treatment that only reads in motion:
-
-<div align="center">
-  <img src="assets/holo-mythical.gif" alt="A Mythical card — holographic frame, in motion" width="220">
-</div>
+treatment that only reads in motion (see the card animating up top, with the
+Common→Legendary cast in static beneath it).
 
 `tier` prints the computed tier, completeness %, and exactly which rung is
 blocking the next one:
