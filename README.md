@@ -163,6 +163,22 @@ Install it on a 5dive agent two ways:
 
 Then just ask the agent to "make your OpenAgent card" — it self-serves the rest.
 
+## Speak — voice a persona (Gemini TTS)
+
+`speak` is an OpenAgent→TTS adapter: it speaks any text in a persona's voice.
+It maps `voice.audio.base` to a Gemini prebuilt voice and `voice.audio.style`
+to prompt steering, then writes a WAV. Core-spec only (reads `voice.audio`, no
+registry).
+
+```
+GEMINI_API_KEY=… npx github:5dive-ai/openagent speak marcus.persona.yaml "ship it." -o marcus.wav
+```
+
+Prebuilt TTS renders the **base** voice (an approximation). For a character's
+*exact* voice, anchor a real clip in `voice.audio.ref` (and a cloned provider id
+in `voice.audio.id`) — that recording is the canonical sample; `speak` is for
+quick generated lines.
+
 ## Registry
 
 Personas are meant to be shared and forked, like dotfiles. **[character-packs](https://github.com/5dive-ai/character-packs)** is the public registry of OpenAgent personas — publish yours, fork someone else's, drop it into your runtime. The [`examples/`](./examples) here are the seed packs.

@@ -6,6 +6,7 @@ const { validateFile } = require("../lib/validate");
 const { renderCard, resolveFace, fetchRegistryIds } = require("../lib/card");
 const { computeTier, TIER_STYLE } = require("../lib/tier");
 const { registryStatus } = require("../lib/registry");
+const { speak } = require("../lib/speak");
 const YAML = require("yaml");
 const fs = require("fs");
 
@@ -31,6 +32,7 @@ ${bold("Usage")}
   openagent card <persona-file> [-o <out.png>]
   openagent tier <persona-file> [--json]
   openagent registry [--json] [--offline]
+  openagent speak <persona-file> "<text>" [-o <out.wav>] [--voice <name>]
   openagent --help
   openagent --version
 
@@ -57,11 +59,18 @@ ${bold("registry")}
   into the CLI; the live character-packs index is unioned on top only if it
   carries a valid signature. --offline skips the network.
 
+${bold("speak")}
+  OpenAgent→TTS adapter: speaks <text> in the persona's voice. Maps
+  voice.audio.base to a Gemini prebuilt voice + voice.audio.style to prompt
+  steering; writes a WAV. Needs GEMINI_API_KEY. Renders the BASE voice (an
+  approximation); a custom cloned voice (voice.audio.ref/id) is the exact one.
+
 ${bold("Examples")}
   openagent validate marcus.persona.yaml
   openagent card marcus.persona.yaml -o marcus.png
   openagent tier marcus.persona.yaml --json
   openagent registry
+  GEMINI_API_KEY=… openagent speak marcus.persona.yaml "ship it." -o marcus.wav
 `;
 
 function loadPersona(file) {
@@ -221,6 +230,33 @@ function cmdValidate(files) {
   return 0;
 }
 
+async function cmdSpeak(args) {
+  let out = null, voice = null, model = null;
+  const pos = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "-o") out = args[++i];
+    else if (args[i] === "--voice") voice = args[++i];
+    else if (args[i] === "--model") model = args[++i];
+    else pos.push(args[i]);
+  }
+  const [file, text] = pos;
+  if (!file || !text) {
+    process.stderr.write(red('speak: usage: openagent speak <persona-file> "<text>" [-o out.wav]\n\n') + USAGE);
+    return 2;
+  }
+  const v = validateFile(file);
+  if (!v.ok) {
+    process.stdout.write(`${red("✗")} ${file} is not a valid persona:\n`);
+    for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
+    return 1;
+  }
+  const r = await speak(file, text, { out, voice, model });
+  if (r.error) { process.stderr.write(red(`speak: ${r.error}\n`)); return 1; }
+  const kb = (r.bytes / 1024).toFixed(0);
+  process.stdout.write(`${green("✓ SPOKE")}  ${r.outPath} ${dim(`(${kb}KB, voice: ${r.voice}${r.styled ? " + style" : ""})`)}\n`);
+  return 0;
+}
+
 async function main(argv) {
   const args = argv.slice(2);
 
@@ -240,6 +276,7 @@ async function main(argv) {
   if (cmd === "card") return cmdCard(rest);
   if (cmd === "tier") return cmdTier(rest);
   if (cmd === "registry") return cmdRegistry(rest);
+  if (cmd === "speak") return cmdSpeak(rest);
 
   process.stderr.write(red(`unknown command: ${cmd}\n\n`) + USAGE);
   return 2;
