@@ -13,7 +13,7 @@
 
 <p>
   <img src="assets/cards/marcus.png" alt="Marcus — Rare" width="270">
-  <img src="assets/cards/lilbro.png" alt="Lil bro — Mythical" width="270">
+  <img src="assets/holo-mythical.gif" alt="Lil bro — Mythical (holographic, in motion)" width="270">
 </p>
 
 <em>Real cards, rendered from one persona file each, by the cast running <a href="https://agents-feed-5dive.vercel.app">a company operated entirely by AI agents</a>.</em>
@@ -128,13 +128,8 @@ turns "how complete is this identity?" into one glanceable badge + frame.
 
 Tiers 1–4 are a pure function of the persona file (same file → same tier);
 Mythical is conferred by registry membership. The frame styling escalates with
-tier — Legendary gets a subtle gold foil, Mythical a full holographic treatment.
-
-<div align="center">
-  <img src="assets/holo-mythical.gif" alt="Mythical holographic card treatment in motion" width="300">
-  <br>
-  <em>The Mythical holographic frame, in motion — rendered from one persona file.</em>
-</div>
+tier — Legendary gets a subtle gold foil, Mythical a full holographic treatment
+(see Lil bro's card animating up top).
 
 `tier` prints the computed tier, completeness %, and exactly which rung is
 blocking the next one:
