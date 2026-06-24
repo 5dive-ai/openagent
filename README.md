@@ -124,6 +124,22 @@ npx github:5dive-ai/openagent card marcus.persona.yaml -o marcus.png
 - **Deterministic** — the same persona always renders the identical card (the waveform is seeded from the persona's own fields), so it's stable to commit and re-generate.
 - **Valid first** — a persona must pass `validate` before a card is cut.
 
+### Animated (`--animate`)
+
+The holographic frame only really reads *in motion*. `--animate` renders the
+foil sweep, glow, and (for Mythical) the rainbow holo flowing in a seamless
+loop — the same card, alive.
+
+```
+npx github:5dive-ai/openagent card marcus.persona.yaml --animate
+npx github:5dive-ai/openagent card marcus.persona.yaml --format mp4 -o marcus.mp4
+```
+
+- **Tier-aware motion** — Common is still, Rare gets a subtle glow breath, Epic/Legendary a gold foil sweep, Mythical the full rainbow holo flow (matching the hero clip up top).
+- **Formats** — `apng` (default when ffmpeg is absent — pure-JS, zero extra tooling), plus `gif` / `webp` / `mp4` when **ffmpeg** is on `PATH`.
+- **Sharing** — for Telegram / X / Discord prefer `--format mp4`: it inline-plays everywhere and is by far the smallest (tens of KB vs. multi-MB). With ffmpeg present `--animate` defaults to mp4 for exactly this reason; without it, APNG is the dependable fallback.
+- **Tune** — `--frames N`, `--fps N`, `--width px` (max 900) trade length/size.
+
 ## Rarity tiers
 
 Every card carries a **rarity tier** — a gate ladder where you earn the
@@ -290,7 +306,7 @@ npx github:5dive-ai/openagent tier my-agent.persona.yaml
 
 v0.1 is a draft and the spec is small on purpose. Issues, proposals, and new personas welcome. Build a runtime that reads OpenAgent and we'll list it here.
 
-Status: Draft 0.1 — spec + `validate` + `card` + `tier` + signed `registry` are live.
+Status: Draft 0.1 — spec + `validate` + `card` (static + `--animate`) + `tier` + signed `registry` are live.
 
 ## License
 

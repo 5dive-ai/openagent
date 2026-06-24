@@ -15,6 +15,22 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-06-24 · CLI only
+
+Animated cards — "holo in motion" (DIVE-665).
+
+- `card --animate` renders the card in a seamless loop: the foil sweep, glow
+  breath, and (Mythical) rainbow holo flow now move. Motion is **tier-aware** —
+  Common is still, Rare gets a subtle glow breath, Epic/Legendary a gold foil
+  sweep, Mythical the full rainbow holo flow.
+- `--format apng|gif|webp|mp4`. APNG is pure-JS (new `lib/apng.js`, zero extra
+  tooling); gif/webp/mp4 use system **ffmpeg** when present. `--animate` defaults
+  to **mp4 when ffmpeg is available** (smallest + inline-plays on Telegram/X/
+  Discord), else **apng** as the dependable fallback.
+- `--frames`, `--fps`, `--width` tune length/size.
+- Static `card` output is unchanged (the SVG is byte-identical when motion is
+  not requested), so committed cards and the gallery are unaffected.
+
 ## [0.12.0] — 2026-06-24 · spec 0.2
 
 Governance & the road to 1.0 (DIVE-655).

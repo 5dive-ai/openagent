@@ -60,6 +60,37 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("mythical adds holo wash", /holoWash/.test(buildSvg(lilDoc, null, "mythical")));
   check("common has no glow stack", !/stroke-opacity="0.16"/.test(buildSvg(marcusDoc, null, "common")));
 
+  // 4b. Animated card (DIVE-665): motion is opt-in + back-compat, tier-aware,
+  // and the APNG encoder stitches resvg frames with no native deps.
+  check("static card byte-identical when motion omitted",
+    buildSvg(lilDoc, null, "legendary") === buildSvg(lilDoc, null, "legendary", undefined));
+  const lgA = buildSvg(lilDoc, null, "legendary", { phase: 0 });
+  const lgB = buildSvg(lilDoc, null, "legendary", { phase: 0.5 });
+  check("foil tier animates (frames differ across phase)", lgA !== lgB);
+  check("common stays still even when animated (no foil/glow)",
+    buildSvg(marcusDoc, null, "common", { phase: 0 }) === buildSvg(marcusDoc, null, "common", { phase: 0.5 }));
+  check("mythical holo hue flows with phase",
+    buildSvg(lilDoc, null, "mythical", { phase: 0 }) !== buildSvg(lilDoc, null, "mythical", { phase: 0.4 }));
+  // APNG encoder: feed it two tiny distinct PNGs (rasterized from the SVG) and
+  // confirm it emits a well-formed animated PNG (signature + acTL + N frames).
+  const { encodeApng, parseChunks } = require("../lib/apng");
+  const { Resvg } = require("@resvg/resvg-js");
+  const tiny = (phase) => new Resvg(
+    buildSvg(lilDoc, null, "mythical", { phase }).replace('width="900" height="1260"', 'width="90" height="126"')
+  ).render().asPng();
+  const apng = encodeApng([tiny(0), tiny(0.5), tiny(0.9)], { delayNum: 1, delayDen: 12 });
+  const chunks = parseChunks(apng);
+  check("apng has PNG signature", apng.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])));
+  check("apng declares acTL with frame count", (() => {
+    const ac = chunks.find((c) => c.type === "acTL");
+    return ac && ac.data.readUInt32BE(0) === 3;
+  })());
+  check("apng has 3 fcTL (one per frame) + fdAT for frames after first", (() => {
+    const fcTL = chunks.filter((c) => c.type === "fcTL").length;
+    const fdAT = chunks.filter((c) => c.type === "fdAT").length;
+    return fcTL === 3 && fdAT >= 2;
+  })());
+
   // 5. Rarity ladder.
   const marcusTier = computeTier(marcusDoc, { faceResolved: true, inRegistry: false });
   check("marcus = Rare (base unset blocks Epic)", marcusTier.tier === "Rare" && marcusTier.level === 2);

@@ -3,7 +3,7 @@
 
 const path = require("path");
 const { validateFile } = require("../lib/validate");
-const { renderCard, resolveFace, fetchRegistryIds } = require("../lib/card");
+const { renderCard, renderAnimatedCard, resolveFace, fetchRegistryIds, hasFfmpeg } = require("../lib/card");
 const { computeTier, computeBadges, nextRung, rungNeeds, TIER_STYLE } = require("../lib/tier");
 const { registryStatus } = require("../lib/registry");
 const { speak } = require("../lib/speak");
@@ -52,6 +52,7 @@ const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (v0.1)
 ${bold("Usage")}
   openagent validate <persona-file> [<persona-file> ...]
   openagent card <persona-file> [-o <out.png>]
+  openagent card <persona-file> --animate [--format apng|gif|webp|mp4] [--frames N] [--fps N] [--width px]
   openagent tier <persona-file> [--json]
   openagent registry [--json] [--offline]
   openagent speak <persona-file> "<text>" [-o <out.wav>] [--voice <name>]
@@ -74,6 +75,15 @@ ${bold("card")}
   Renders a shareable PNG "trading card" from a persona: avatar (face.ref),
   a voice waveform from voice.audio (base+style), name, role, the written
   sample, and the computed rarity tier. Writes <id>.card.png unless -o given.
+
+  ${bold("--animate")} renders the card in motion (DIVE-665) — the holo/foil sweep,
+  glow, and rainbow speckle loop seamlessly. Motion is TIER-AWARE: Common is
+  still, Rare gets a subtle glow breath, Epic/Legendary a gold foil sweep,
+  Mythical the full rainbow holo flow. Formats: ${bold("apng")} (default, no extra
+  tooling — works anywhere this CLI runs), and ${bold("gif")}/${bold("webp")}/${bold("mp4")} which need
+  ffmpeg on PATH. For sharing on socials (Telegram/X/Discord) prefer ${bold("--format mp4")}:
+  it inline-plays everywhere and is the smallest. --frames (default 24),
+  --fps (default 20), --width (default 720, max 900) tune length/size.
 
 ${bold("tier")}
   Prints the computed rarity tier + completeness % + the gate breakdown.
@@ -120,6 +130,8 @@ ${bold("verify")}
 ${bold("Examples")}
   openagent validate marcus.persona.yaml
   openagent card marcus.persona.yaml -o marcus.png
+  openagent card marcus.persona.yaml --animate                 # looping APNG
+  openagent card marcus.persona.yaml --format mp4 -o marcus.mp4 # for socials
   openagent tier marcus.persona.yaml --json
   openagent registry
   GEMINI_API_KEY=… openagent speak marcus.persona.yaml "ship it." -o marcus.wav
@@ -137,11 +149,20 @@ function loadPersona(file) {
 async function cmdCard(args) {
   let out = null;
   let checkRegistry = true;
+  let animate = false;
+  let format = null; // setting --format implies --animate
+  let frames = null, fps = null, width = null;
   const positional = [];
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "-o" || args[i] === "--out") out = args[++i];
-    else if (args[i] === "--no-registry") checkRegistry = false;
-    else positional.push(args[i]);
+    const a = args[i];
+    if (a === "-o" || a === "--out") out = args[++i];
+    else if (a === "--no-registry") checkRegistry = false;
+    else if (a === "--animate" || a === "--animated") animate = true;
+    else if (a === "--format" || a === "-f") { format = String(args[++i] || "").toLowerCase(); animate = true; }
+    else if (a === "--frames") frames = parseInt(args[++i], 10);
+    else if (a === "--fps") fps = parseInt(args[++i], 10);
+    else if (a === "--width") width = parseInt(args[++i], 10);
+    else positional.push(a);
   }
   if (positional.length === 0) {
     process.stderr.write(red("card: no persona file given\n\n") + USAGE);
@@ -154,6 +175,32 @@ async function cmdCard(args) {
     for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
     return 1;
   }
+
+  if (animate) {
+    const explicitFormat = !!format;
+    // Default the share artifact to mp4 when ffmpeg is here — it inline-plays on
+    // Telegram/X/Discord and is by far the smallest. APNG is the zero-dep
+    // fallback when ffmpeg is absent.
+    if (!format) format = hasFfmpeg() ? "mp4" : "apng";
+    const res = await renderAnimatedCard(file, out, { checkRegistry, format, frames, fps, width });
+    if (!res.ok) {
+      process.stderr.write(red(`card: ${res.error}\n`));
+      return 2;
+    }
+    const kb = Math.round(res.bytes / 1024);
+    const faceNote = res.faceResolved ? "" : dim(" · no face (monogram)");
+    process.stdout.write(
+      `${green("✓ CARD")}  ${res.outPath} ${dim(`(${res.format} · ${res.width}×${res.height} · ${res.frames}f@${res.fps}fps · ${kb}KB)`)} — ${tierTag(res.tier)} ${dim(`· ${res.completeness}% complete`)}${faceNote}\n`
+    );
+    // Steer toward the best share artifact.
+    if (res.format === "apng" && res.sharperWithFfmpeg) {
+      process.stdout.write(dim(`        ↳ sharing on socials (Telegram/X/Discord)? re-run with --format mp4 — inline-plays everywhere & smaller\n`));
+    } else if (res.format === "apng" && !res.sharperWithFfmpeg) {
+      process.stdout.write(dim(`        ↳ APNG (zero-dep fallback). Install ffmpeg for --format mp4/gif/webp — smaller & better social autoplay.\n`));
+    }
+    return 0;
+  }
+
   const res = await renderCard(file, out, { checkRegistry });
   if (!res.ok) {
     process.stderr.write(red(`card: ${res.error}\n`));
