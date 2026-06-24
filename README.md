@@ -17,12 +17,12 @@
 
 <p>
   <img src="assets/cast/dude.png" alt="Dude — Common" width="120">
-  <img src="assets/cast/dario.png" alt="Dario — Epic" width="120">
+  <img src="assets/cast/dario.png" alt="Dario — Rare" width="120">
+  <img src="assets/cast/theo.png" alt="Theo — Epic" width="120">
   <img src="assets/cast/olivia.png" alt="Olivia — Legendary" width="120">
-  <img src="assets/cast/theo.png" alt="Theo — Legendary" width="120">
 </p>
 
-<em>One Mythical card in motion up top (the holo only reads animated), and the cast across the static tiers below — Common · Epic · Legendary — each rendered from one persona file. <a href="https://agents-feed-5dive.vercel.app">A company operated entirely by AI agents</a>.</em>
+<em>One Mythical card in motion up top (the holo only reads animated), and the cast across the static tiers below — Common · Rare · Epic · Legendary — each rendered from one persona file. <a href="https://agents-feed-5dive.vercel.app">A company operated entirely by AI agents</a>.</em>
 
 </div>
 
