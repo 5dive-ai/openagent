@@ -87,6 +87,10 @@ ${bold("card")}
   zero-dep fallback. For sharing on socials prefer mp4 — it inline-plays
   everywhere and is the smallest. --frames (default 24), --fps (default 20),
   --width (default 720, max 900) tune length/size.
+  On the animated render an ${bold("UNSIGNED")} persona is auto-given an identity (a
+  keypair is minted, the persona signed in place, the private key saved beside it
+  as <id>.key — keep it secret, never commit it) so the card shows a real ROLLED
+  rarity instead of Ungraded. ${bold("--no-sign")} skips that; static/--png renders never mint.
 
 ${bold("tier")}
   Prints the computed rarity tier + completeness % + the gate breakdown.
@@ -158,12 +162,45 @@ function loadPersona(file) {
   return YAML.parse(raw);
 }
 
+// Auto-mint an identity for an UNSIGNED persona so its rarity actually rolls.
+// Rarity (DIVE-672) is seeded from the did:key, which only exists once a persona
+// is signed — so without this, `card` would render *Ungraded* and the whole
+// gamification (your rolled tier) never shows. Putting it in the CLI (not skill
+// prose) makes it bulletproof: same reasoning as animate-by-default. Mints a
+// keypair, signs in place, persists the signed persona (the renderer re-reads
+// the file), and saves the private key next to it (0600) so the agent can
+// re-sign after edits. CRITICAL: only mints when there is NO created_by.key —
+// it NEVER re-keys an already-signed persona (that would change its permanent
+// identity and reroll its rarity). Returns whether it minted.
+function autoMintIdentity(file) {
+  let persona;
+  try {
+    persona = loadPersona(file);
+  } catch {
+    return { minted: false };
+  }
+  const hasKey = !!persona?.provenance?.created_by?.key;
+  if (hasKey) return { minted: false };
+  const kp = generateKeypair();
+  const signed = signPersona(persona, { privateKey: kp.privateKey, signedAt: new Date().toISOString() });
+  fs.writeFileSync(file, YAML.stringify(signed));
+  const keyfile = file.replace(/\.(persona\.)?ya?ml$/i, "") + ".key";
+  fs.writeFileSync(keyfile, kp.privateKey, { mode: 0o600 });
+  const did = didKeyFromPublicKey(signed.provenance.created_by.key);
+  process.stdout.write(
+    `${green("🔑 minted identity")} ${dim(did)}\n` +
+    `        ${dim(`private key → ${keyfile} (keep it safe & private; you'll need it to re-sign if you edit the persona)`)}\n`
+  );
+  return { minted: true, did };
+}
+
 async function cmdCard(args) {
   let out = null;
   let checkRegistry = true;
   let animate = false;
   let explicitAnimate = false;     // user passed --animate / --format
   let forceStatic = false;         // user passed --static / --png / --no-animate
+  let noSign = false;              // user passed --no-sign (skip auto-mint identity)
   let format = null; // setting --format implies --animate
   let frames = null, fps = null, width = null;
   const positional = [];
@@ -173,6 +210,7 @@ async function cmdCard(args) {
     else if (a === "--no-registry") checkRegistry = false;
     else if (a === "--animate" || a === "--animated") { animate = true; explicitAnimate = true; }
     else if (a === "--static" || a === "--png" || a === "--no-animate") forceStatic = true;
+    else if (a === "--no-sign") noSign = true;
     else if (a === "--format" || a === "-f") { format = String(args[++i] || "").toLowerCase(); animate = true; explicitAnimate = true; }
     else if (a === "--frames") frames = parseInt(args[++i], 10);
     else if (a === "--fps") fps = parseInt(args[++i], 10);
@@ -205,6 +243,12 @@ async function cmdCard(args) {
     for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
     return 1;
   }
+
+  // Mint an identity so the card shows a real ROLLED rarity instead of Ungraded
+  // (rarity is seeded from the did:key, which only exists once signed). Only on
+  // the shareable (animated) render and only if not opted out — static/--png
+  // renders (embeds, avatars, registry) stay non-mutating. No-op if already signed.
+  if (animate && !noSign) autoMintIdentity(file);
 
   if (animate) {
     const explicitFormat = !!format;

@@ -1,2 +1,5 @@
 node_modules/
 *.log
+# ed25519 private signing keys (minted by `card`/`keygen`) — a leaked key forges
+# an identity, so they must NEVER be committed.
+*.key

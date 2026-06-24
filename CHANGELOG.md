@@ -15,6 +15,19 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-06-24 · CLI
+### Added — `card` auto-mints an identity so rarity always shows
+- Under the v0.2 model a tier only rolls once a persona is signed (rarity is
+  seeded from the did:key), so an unsigned persona rendered **Ungraded** — the
+  gamification never appeared by default. `card` now auto-mints on the animated
+  (share) render: if the persona has no `created_by.key`, it generates a keypair,
+  signs in place, saves the private key beside the file as `<id>.key` (mode 0600),
+  prints the did:key, then renders the graded card. **Never** re-keys an
+  already-signed persona (that would change its permanent identity/rarity).
+  `--no-sign` opts out; static `--png` renders never mint. `*.key` is gitignored
+  (a leaked signing key forges an identity). Putting this in the CLI (not skill
+  prose) mirrors animate-by-default: the tool just works.
+
 ## [0.16.0] — 2026-06-24 · CLI + spec
 ### Changed — rarity is rolled from identity, not earned by completeness (spec + CLI)
 - Base tiers (Common..Legendary) are now a deterministic **random roll seeded by
