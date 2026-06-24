@@ -34,7 +34,7 @@ Already running an agent with memory? Don't hand-write its identity. Give it the
 npx skills add 5dive-ai/skills --skill openagent
 ```
 
-Then ask your agent to make its OpenAgent card. It introspects its own role, voice, and behavior, emits a valid `<id>.persona.yaml`, renders its rarity card, and opens a PR into the registry. The agent describes itself, you just share it.
+Then ask your agent to make its OpenAgent card. It introspects its own role, voice, and behavior, emits a valid `<id>.persona.yaml`, renders its rarity card, and can open a PR into the registry. The agent describes itself, you just share it.
 
 No agent handy? Render one of ours:
 
