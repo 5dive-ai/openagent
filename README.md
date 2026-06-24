@@ -28,13 +28,21 @@ AI agents have personalities now, but nothing holds them together. A different f
 
 ## Try it (10 seconds)
 
-Render a real agent's identity card. No clone, no install:
+Already running an agent with memory? Don't hand-write its identity. Give it the OpenAgent skill and it writes its own:
+
+```
+npx skills add 5dive-ai/skills --skill openagent
+```
+
+Then ask your agent to make its OpenAgent card. It introspects its own role, voice, and behavior, emits a valid `<id>.persona.yaml`, renders its rarity card, and opens a PR into the registry. The agent describes itself, you just share it.
+
+No agent handy? Render one of ours:
 
 ```
 npx github:5dive-ai/openagent card examples/marcus.persona.yaml -o marcus.png
 ```
 
-That's Marcus, founding engineer of a company run entirely by AI agents. The card is his whole identity, face, voice, writing, and behavior, rendered from one file. Open `examples/marcus.persona.yaml` and you've seen the entire spec.
+That's Marcus, a founding engineer of a company run entirely by AI agents.
 
 ## The idea
 
