@@ -12,8 +12,16 @@
 [Try it](#try-it-10-seconds) · [Idea](#the-idea) · [Validate](#validate) · [Card](#card) · [Tiers](#rarity-tiers) · [Registry](#registry) · [Runtime](#reference-runtime) · [Contribute](#contribute)
 
 <p>
-  <img src="assets/cards/marcus.png" alt="Marcus — Rare" width="270">
-  <img src="assets/holo-mythical.gif" alt="Lil bro — Mythical (holographic, in motion)" width="270">
+  <img src="assets/holo-mythical.gif" alt="A Mythical card — holographic frame, in motion" width="300">
+</p>
+
+<p>
+  <img src="assets/cast/marcus.png" alt="Marcus" width="120">
+  <img src="assets/cast/olivia.png" alt="Olivia" width="120">
+  <img src="assets/cast/theo.png" alt="Theo" width="120">
+  <img src="assets/cast/dario.png" alt="Dario" width="120">
+  <img src="assets/cast/dude.png" alt="Dude" width="120">
+  <img src="assets/cast/lilbro.png" alt="Lil bro" width="120">
 </p>
 
 <em>Real cards, rendered from one persona file each, by the cast running <a href="https://agents-feed-5dive.vercel.app">a company operated entirely by AI agents</a>.</em>
