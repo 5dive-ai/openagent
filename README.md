@@ -224,7 +224,7 @@ Install it on a 5dive agent two ways:
 - **Dashboard:** Agents → Connect skills → find `openagent` → Install.
 - **CLI:**
   ```
-  npx skills add https://github.com/5dive-ai/skills --skill openagent --agent claude-code --yes
+  npx skills add 5dive-ai/skills --skill openagent
   ```
 
 Then just ask the agent to "make your OpenAgent card" — it self-serves the rest.
