@@ -313,9 +313,10 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("tampered manifest fails verification", registry.verifyBytes(tampered, realSig) === false);
   check("a forged signature fails verification", registry.verifyBytes(goodBytes, crypto.randomBytes(64).toString("base64")) === false);
 
-  // slugsOf reads both the slim bundled shape and the full character-packs index.
-  check("slugsOf reads packs[].slug shape", registry.slugsOf({ packs: [{ slug: "a" }, { slug: "b" }] }).join() === "a,b");
-  check("slugsOf reads slugs[] shape", registry.slugsOf({ slugs: ["x", "y"] }).join() === "x,y");
+  // slugsOf honors an explicit curated slugs[] only; a marketplace packs[] index
+  // confers NOTHING (DIVE-674: marketplace membership != Mythical).
+  check("slugsOf does NOT confer Mythical from marketplace packs[] (DIVE-674)", registry.slugsOf({ packs: [{ slug: "a" }, { slug: "b" }] }).length === 0);
+  check("slugsOf reads curated slugs[] shape", registry.slugsOf({ slugs: ["x", "y"] }).join() === "x,y");
 
   // 7. Per-file provenance — created_by + signature + remix lineage (DIVE-651).
   // Back-compat: v0.1 files (no provenance) still validate, and verify cleanly
