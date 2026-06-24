@@ -113,6 +113,38 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   delete noRecipe.face.recipe;
   check("face without recipe still validates (0.1 back-compat)", validate(noRecipe).ok === true);
 
+  // ext — sanctioned extension namespace, additive + back-compat (DIVE-652).
+  // The core schema is closed (additionalProperties:false); ext is the only
+  // sanctioned place for tool-specific fields, so adopters don't fork the schema.
+  const baseNoExt = JSON.parse(JSON.stringify(marcusDoc));
+  delete baseNoExt.ext;
+  check("persona without ext validates (back-compat)", validate(baseNoExt).ok === true);
+  const withExt = JSON.parse(JSON.stringify(baseNoExt));
+  withExt.ext = { "acme-studio": { render_preset: "cinematic-4k", fps: 24 }, fivedive: { pinned: true } };
+  check("ext with namespaced tool objects validates", validate(withExt).ok === true);
+  check("ext accepts arbitrary fields inside a namespace (open)", validate({
+    ...baseNoExt, ext: { mytool: { anything: ["a", 1, { nested: true }], flag: false } },
+  }).ok === true);
+  const flatExt = JSON.parse(JSON.stringify(baseNoExt));
+  flatExt.ext = { stray_scalar: "nope" };
+  check("ext rejects un-namespaced scalars (value must be an object)", validate(flatExt).ok === false);
+  const unknownTop = JSON.parse(JSON.stringify(baseNoExt));
+  unknownTop.unsanctioned = { foo: 1 };
+  check("a non-ext unknown top-level field is still rejected (core stays closed)", validate(unknownTop).ok === false);
+  // ext is part of the document → covered by provenance signing, and inert for rarity.
+  const extTier = computeTier(withExt, { faceResolved: true });
+  const noExtTier = computeTier(baseNoExt, { faceResolved: true });
+  check("ext does not affect computed tier", extTier.tier === noExtTier.tier);
+  const extKp = provenance.generateKeypair();
+  const extSigned = provenance.signPersona(withExt, { privateKey: extKp.privateKey });
+  check("ext is covered by the signature (verifies)", provenance.verifyPersona(extSigned).ok === true);
+  const extTampered = JSON.parse(JSON.stringify(extSigned));
+  extTampered.ext["acme-studio"].fps = 60;
+  check("tampering ext breaks the signature", provenance.verifyPersona(extTampered).ok === false);
+
+  // The shipped marcus example carries a real ext block and still validates.
+  check("marcus example ext.fivedive present", marcusDoc.ext && marcusDoc.ext.fivedive.dashboard_pinned === true);
+
   // 6. Signed registry — ship + verify.
   const bundled = registry.loadBundled();
   check("bundled manifest verifies against shipped key", bundled.verified === true);

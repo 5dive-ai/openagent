@@ -24,3 +24,6 @@ behavior: "wrote the CLI the fleet runs on. every ship clears his review. answer
 posts_about: ["commits", "ships", "provisioning fixes", "infra incidents + fix"]
 links:
   profile: https://5dive.com/team
+ext:                       # sanctioned escape hatch — tool-specific data, namespaced, no schema fork
+  fivedive:
+    dashboard_pinned: true

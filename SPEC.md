@@ -2,7 +2,7 @@
 
 A persona is a single YAML (or JSON) document describing one agent's identity. A conforming file MUST validate against [`schema/persona.schema.json`](./schema/persona.schema.json).
 
-> **v0.2** adds optional per-file **`provenance`** — authorship, an integrity signature, and remix lineage — on top of v0.1. Everything is additive: a valid v0.1 file is a valid v0.2 file.
+> **v0.2** adds optional per-file **`provenance`** — authorship, an integrity signature, and remix lineage — and a sanctioned **`ext`** extension namespace, on top of v0.1. Everything is additive: a valid v0.1 file is a valid v0.2 file.
 
 ## Top-level fields
 
@@ -17,6 +17,7 @@ A persona is a single YAML (or JSON) document describing one agent's identity. A
 | `posts_about` | – | string[] | optional; event types this persona speaks to (feed/automation use). |
 | `links` | – | object | optional; `avatar`, `profile`, `repo`, etc. |
 | `provenance` | – | object | optional (v0.2); per-file authorship, integrity signature, and remix lineage. |
+| `ext` | – | object | optional (v0.2); sanctioned namespace for tool-specific fields, so adopters extend without forking the schema. |
 
 ### `face`
 A face should be reproducible by design, not a single fragile PNG. `ref` is the canonical frozen image and `anchor` describes the locked likeness in words; together they keep renders on-model. The optional `recipe` goes one step further — it records *how `ref` was generated* (model + prompt + seed), so the canonical likeness can be **regenerated**, the same way `voice.audio` is reproducible from `base + style`. With a recipe, sprites, reels, and 3D models can all be driven from a freshly re-rendered, identical face instead of upscaling one lossy PNG.
@@ -82,10 +83,32 @@ v0.1 left the persona *file* unproven: only the Mythical registry manifest was s
 
 The CLI provides `openagent keygen`, `openagent sign <file> --key <privkey>`, and `openagent verify <file>`. See [`examples/marcus-ops.persona.yaml`](./examples/marcus-ops.persona.yaml) for a signed fork with lineage.
 
+### `ext` (v0.2, optional)
+
+The core schema is **closed** — every object is `additionalProperties: false`, so an unknown field is a validation error, not a silent passthrough. That keeps the standard honest, but a closed schema gives adopters nowhere to put their own data: their only option would be to fork the schema, and a hundred private forks is how a standard dies.
+
+`ext` is the sanctioned escape hatch. It is one open object at the top level: tool-specific fields live **under `ext`**, namespaced by tool or vendor, and the core spec ignores them.
+
+```yaml
+ext:
+  acme-studio:        # one namespace per tool/vendor — collisions become impossible
+    render_preset: cinematic-4k
+    fps: 24
+  fivedive:
+    dashboard_pinned: true
+```
+
+| Rule | Notes |
+|------|-------|
+| Namespace your keys | each key under `ext` is a tool/vendor namespace (`acme-studio`, a reverse-DNS string, etc.); its value is your free-form object. Two tools never clash. |
+| Don't depend on others' namespaces | a conforming tool reads only its own `ext.<self>`; it must tolerate a file with none. |
+| Core fields stay core | `ext` is for *tool-specific* data. If something is genuinely about the persona's identity, propose it for the core spec — don't hide it in `ext`. |
+| Signed and portable | `ext` is part of the document: it travels with the file and is covered by `provenance` signing. It does **not** affect computed rarity. |
+
 ## Design rules
 
 1. **One face, forever.** The whole point is consistency. Changing the *likeness* is a new identity, not an edit. Re-rendering `ref` from the same `face.recipe` (same model, prompt, seed) is not a change — it's the same face, reproduced; that's exactly what the recipe is for.
-2. **A persona is portable.** The file is the source of truth; renderers, TTS, and posting bots consume it. No tool-specific fields in the core spec.
+2. **A persona is portable.** The file is the source of truth; renderers, TTS, and posting bots consume it. No tool-specific fields in the *core* spec — those belong in the open `ext` namespace, so the core stays the same everywhere while adopters still extend it without forking.
 3. **Receipts over performance** (recommended convention): personas built for public feeds should tie posts to a real artifact, not generate content for its own sake. Not enforced by schema; encouraged by example.
 
 ## Versioning

@@ -96,6 +96,11 @@
         },
         "signature": { "type": "string", "description": "detached ed25519 signature (base64) over the canonical persona document with this field removed. Proves integrity + key-authorship." }
       }
+    },
+    "ext": {
+      "type": "object",
+      "description": "sanctioned extension namespace (spec v0.2) — the escape hatch for tool-specific data. The core spec is closed (additionalProperties:false everywhere); adopters put their own fields UNDER ext instead of forking the schema. Each key is a tool/vendor namespace and its value is that tool's free-form object, so two tools never collide. The core spec ignores ext, and it does not affect computed rarity; it IS covered by provenance signing as part of the document.",
+      "additionalProperties": { "type": "object" }
     }
   }
 }

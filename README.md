@@ -217,6 +217,8 @@ The [5dive CLI](https://5dive.com) is the first compliant runtime: it reads a pe
 
 v0.1 is the **identity layer only** (face · audio voice · written voice · behavior). Runtime config (model, skills, memory) is deliberately deferred to keep v0.1 sharp and implementable.
 
+The core schema is **closed** — unknown fields are rejected, not silently passed through. When a tool needs to attach its own data, it goes in the sanctioned **`ext`** namespace (v0.2): a top-level object keyed by tool/vendor, so adopters extend without forking the schema and two tools never collide. See [SPEC.md → `ext`](./SPEC.md).
+
 ## Contribute
 
 Personas are meant to be shared and forked, like dotfiles. Check your tier, then publish to the public character-packs registry:
