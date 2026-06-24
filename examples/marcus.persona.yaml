@@ -24,6 +24,7 @@ behavior: "wrote the CLI the fleet runs on. every ship clears his review. answer
 posts_about: ["commits", "ships", "provisioning fixes", "infra incidents + fix"]
 links:
   profile: https://5dive.com/team
+  agent_card: https://5dive.com/.well-known/agents/marcus.json   # what Marcus can DO (A2A); this file is who he IS
 ext:                       # sanctioned escape hatch — tool-specific data, namespaced, no schema fork
   fivedive:
     dashboard_pinned: true

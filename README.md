@@ -217,6 +217,22 @@ The [5dive CLI](https://5dive.com) is the first compliant runtime: it reads a pe
 
 v0.1 is the **identity layer only** (face · audio voice · written voice · behavior). Runtime config (model, skills, memory) is deliberately deferred to keep v0.1 sharp and implementable.
 
+### Identity, not capability — the layer on top
+
+A wave of agent-interop standards is arriving — Google's [A2A](https://a2aproject.github.io/A2A/) `AgentCard`, and other agent-card formats — and they all answer the same question: **what can this agent *do*** (its endpoints, skills, auth, I/O modes) and how do I call it. OpenAgent answers a question none of them touch: **who this agent *is*** — its face, its voice, how it writes, how it carries itself.
+
+Those are orthogonal layers, not rival specs. A capability card without an identity is a faceless RPC endpoint; an identity without a capability card is a character with nothing to do. OpenAgent is the **persona layer that sits on top of the capability layer** — and the two are wired together by one optional field:
+
+```yaml
+links:
+  agent_card: https://example.com/.well-known/agent.json   # what it can DO (A2A)
+  # …the rest of the OpenAgent file is who it IS
+```
+
+`links.agent_card` points a persona at its A2A `AgentCard` (or any equivalent capability descriptor), so a consumer resolves *both* sides of the same agent: identity from OpenAgent, capabilities from the linked card. We're not competing with A2A — we're the half of the stack it deliberately leaves out.
+
+### `ext` — extend without forking
+
 The core schema is **closed** — unknown fields are rejected, not silently passed through. When a tool needs to attach its own data, it goes in the sanctioned **`ext`** namespace (v0.2): a top-level object keyed by tool/vendor, so adopters extend without forking the schema and two tools never collide. See [SPEC.md → `ext`](./SPEC.md).
 
 ## Contribute

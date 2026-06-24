@@ -145,6 +145,27 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   // The shipped marcus example carries a real ext block and still validates.
   check("marcus example ext.fivedive present", marcusDoc.ext && marcusDoc.ext.fivedive.dashboard_pinned === true);
 
+  // links — identity layer points at the capability layer via agent_card (DIVE-653).
+  // OpenAgent describes who an agent IS; the linked A2A AgentCard describes what it
+  // can DO. The two compose; links stays an open string map for back-compat.
+  const baseLinks = JSON.parse(JSON.stringify(marcusDoc));
+  check("marcus example carries links.agent_card", typeof baseLinks.links.agent_card === "string");
+  const withCard = JSON.parse(JSON.stringify(baseLinks));
+  withCard.links = { agent_card: "https://example.com/.well-known/agent.json", profile: "https://x.test" };
+  check("links.agent_card (named key) validates", validate(withCard).ok === true);
+  const arbLinks = JSON.parse(JSON.stringify(baseLinks));
+  arbLinks.links = { whatever_custom: "https://x.test/y" };
+  check("links still accepts arbitrary string keys (open, back-compat)", validate(arbLinks).ok === true);
+  const nonStrLink = JSON.parse(JSON.stringify(baseLinks));
+  nonStrLink.links = { agent_card: 42 };
+  check("links values must be strings (non-string rejected)", validate(nonStrLink).ok === false);
+  const noLinks = JSON.parse(JSON.stringify(baseLinks));
+  delete noLinks.links;
+  check("persona without links still validates", validate(noLinks).ok === true);
+  // agent_card is a link, not a rarity gate — adding it changes no tier.
+  check("links.agent_card does not change computed tier",
+    computeTier(withCard, { faceResolved: true }).tier === computeTier(arbLinks, { faceResolved: true }).tier);
+
   // 6. Signed registry — ship + verify.
   const bundled = registry.loadBundled();
   check("bundled manifest verifies against shipped key", bundled.verified === true);

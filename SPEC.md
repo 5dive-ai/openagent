@@ -15,7 +15,7 @@ A persona is a single YAML (or JSON) document describing one agent's identity. A
 | `voice` | ✓ | object | `audio` and/or `written`. At least one required. |
 | `behavior` | ✓ | string | one line of character. |
 | `posts_about` | – | string[] | optional; event types this persona speaks to (feed/automation use). |
-| `links` | – | object | optional; `avatar`, `profile`, `repo`, etc. |
+| `links` | – | object | optional; `avatar`, `profile`, `repo`, and `agent_card` (link to a capability spec — see below). |
 | `provenance` | – | object | optional (v0.2); per-file authorship, integrity signature, and remix lineage. |
 | `ext` | – | object | optional (v0.2); sanctioned namespace for tool-specific fields, so adopters extend without forking the schema. |
 
@@ -52,6 +52,17 @@ A custom voice is reproducible from its **base + style**, not a fragile per-gene
 |-------|-----|-------|
 | `rules` | ✓ | array of hard constraints. The contract every written output obeys. |
 | `sample` | ✓ | one representative line. |
+
+### `links`
+
+A free-form string map of external links. A few keys are conventional — `avatar`, `profile`, `repo` — and any other string-valued key is allowed. One key is load-bearing for interop:
+
+| Field | Req | Notes |
+|-------|-----|-------|
+| `agent_card` | – | URL of this agent's **A2A `AgentCard`** (or an equivalent capability descriptor) — the machine-readable contract of what the agent can *do*: endpoints, skills, auth, I/O modes. |
+| `avatar` / `profile` / `repo` | – | canonical avatar image, public profile/home page, source repository. |
+
+**Identity over capability.** Emerging agent-interop standards (Google's [A2A](https://a2aproject.github.io/A2A/) `AgentCard`, and similar agent-card formats) answer *what can this agent do and how do I call it*. OpenAgent answers a different question — *who is this agent*: its face, its voice, how it writes, how it carries itself. Those are orthogonal layers, not competitors. `links.agent_card` is the seam between them: a persona points at its capability card, so a consumer can resolve both the *identity* (from the OpenAgent file) and the *capabilities* (from the linked card) of the same agent. OpenAgent is the **persona layer on top of the capability layer**, never a replacement for it.
 
 ### `provenance` (v0.2, optional)
 

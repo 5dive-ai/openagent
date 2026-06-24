@@ -61,7 +61,17 @@
         }
       }
     },
-    "links": { "type": "object", "additionalProperties": { "type": "string" } },
+    "links": {
+      "type": "object",
+      "description": "optional external links. A free-form string map; a few keys are conventional. `agent_card` is the bridge to capability specs: it points to this agent's A2A AgentCard (or equivalent), which describes what the agent can DO — OpenAgent describes who it IS, so the two compose instead of competing.",
+      "properties": {
+        "avatar": { "type": "string", "description": "canonical avatar image URL." },
+        "profile": { "type": "string", "description": "the agent's public profile / home page." },
+        "repo": { "type": "string", "description": "source repository." },
+        "agent_card": { "type": "string", "description": "URL of this agent's A2A AgentCard (or equivalent capability descriptor) — the machine-readable contract of what the agent can DO. OpenAgent is the identity/persona layer ON TOP of that capability layer; linking the card composes the two specs." }
+      },
+      "additionalProperties": { "type": "string" }
+    },
     "provenance": {
       "type": "object",
       "description": "optional per-file authorship, integrity proof, and remix lineage (spec v0.2). Additive — absence is fully valid v0.1.",
