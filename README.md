@@ -179,6 +179,20 @@ Prebuilt TTS renders the **base** voice (an approximation). For a character's
 in `voice.audio.id`) — that recording is the canonical sample; `speak` is for
 quick generated lines.
 
+## Flow — consistent cast faces in gen-video
+
+`flow` is an OpenAgent→gen-video adapter: it turns a persona into a Flow/Veo
+scene prompt that holds the character's face consistent across clips. It emits
+the reference image(s) (`face.ref`/`face.full`) plus a scene prompt that locks
+the likeness (`face.anchor` + `face.recipe`) and the demeanor (`behavior`).
+Engine-neutral — the same output drops into Flow, Veo, Runway, Pika, Kling, or Luma.
+
+```
+npx github:5dive-ai/openagent flow marcus.persona.yaml "at his desk reviewing a PR, late evening"
+```
+
+Add `--json` for the structured form (reference paths + prompt + seed).
+
 ## Registry
 
 Personas are meant to be shared and forked, like dotfiles. **[character-packs](https://github.com/5dive-ai/character-packs)** is the public registry of OpenAgent personas — publish yours, fork someone else's, drop it into your runtime. The [`examples/`](./examples) here are the seed packs.

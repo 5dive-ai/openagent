@@ -8,6 +8,7 @@ const { computeTier, TIER_STYLE } = require("../lib/tier");
 const { registryStatus } = require("../lib/registry");
 const { speak } = require("../lib/speak");
 const { generateKeypair, signPersona, verifyPersona } = require("../lib/provenance");
+const { flow } = require("../lib/flow");
 const YAML = require("yaml");
 const fs = require("fs");
 
@@ -37,6 +38,7 @@ ${bold("Usage")}
   openagent keygen [-o <prefix>]
   openagent sign <persona-file> --key <privkey.pem> [--name <n>] [--url <u>] [--derived-from <id[:source]>] [-o <out>]
   openagent verify <persona-file> [--json]
+  openagent flow <persona-file> "<scene>" [--json]
   openagent --help
   openagent --version
 
@@ -62,6 +64,12 @@ ${bold("registry")}
   snapshot (founding cast) is ed25519-signed and verified against a key baked
   into the CLI; the live character-packs index is unioned on top only if it
   carries a valid signature. --offline skips the network.
+
+${bold("flow")}
+  OpenAgent→gen-video adapter: emits a Flow/Veo-ready scene prompt + the
+  character reference image(s) that hold the cast face consistent across clips.
+  Maps face.ref/full (reference), face.anchor + face.recipe (locked likeness),
+  and behavior (demeanor). Engine-neutral (Flow, Veo, Runway, Pika, Kling, Luma).
 
 ${bold("speak")}
   OpenAgent→TTS adapter: speaks <text> in the persona's voice. Maps
@@ -95,6 +103,7 @@ ${bold("Examples")}
   openagent keygen -o ana
   openagent sign vera.persona.yaml --key ana.key --name "ana" --derived-from marcus
   openagent verify vera.persona.yaml
+  openagent flow marcus.persona.yaml "at his desk reviewing a pull request, late evening"
 `;
 
 function loadPersona(file) {
@@ -412,6 +421,34 @@ async function cmdSpeak(args) {
   return 0;
 }
 
+async function cmdFlow(args) {
+  const json = args.includes("--json");
+  const pos = args.filter((a) => !a.startsWith("-"));
+  const [file, scene] = pos;
+  if (!file || !scene) {
+    process.stderr.write(red('flow: usage: openagent flow <persona-file> "<scene>" [--json]\n\n') + USAGE);
+    return 2;
+  }
+  const v = validateFile(file);
+  if (!v.ok) {
+    process.stdout.write(`${red("✗")} ${file} is not a valid persona:\n`);
+    for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
+    return 1;
+  }
+  const r = flow(file, scene);
+  if (r.error) { process.stderr.write(red(`flow: ${r.error}\n`)); return 1; }
+  if (json) { process.stdout.write(JSON.stringify(r, null, 2) + "\n"); return 0; }
+  process.stdout.write(`${green("✓ FLOW")}  ${r.name}${r.role ? dim(" — " + r.role) : ""} ${dim("· paste into Flow/Veo")}\n\n`);
+  if (r.refs.length) {
+    process.stdout.write(`${bold("character reference")}\n`);
+    for (const ref of r.refs) process.stdout.write(`  ${ref}\n`);
+    process.stdout.write("\n");
+  }
+  process.stdout.write(`${bold("prompt")}\n${r.prompt}\n`);
+  if (r.model || r.seed != null) process.stdout.write(`\n${dim(`model: ${r.model || "-"}   seed: ${r.seed != null ? r.seed : "-"}`)}\n`);
+  return 0;
+}
+
 async function main(argv) {
   const args = argv.slice(2);
 
@@ -435,6 +472,7 @@ async function main(argv) {
   if (cmd === "keygen") return cmdKeygen(rest);
   if (cmd === "sign") return cmdSign(rest);
   if (cmd === "verify") return cmdVerify(rest);
+  if (cmd === "flow") return cmdFlow(rest);
 
   process.stderr.write(red(`unknown command: ${cmd}\n\n`) + USAGE);
   return 2;
