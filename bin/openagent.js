@@ -85,8 +85,9 @@ ${bold("card")}
   animates; ${bold("-o <name>.png")} or ${bold("--static")} writes the still PNG that embeds
   (avatars, READMEs, the registry). mp4/gif/webp need ffmpeg on PATH; apng is the
   zero-dep fallback. For sharing on socials prefer mp4 — it inline-plays
-  everywhere and is the smallest. --frames (default 24), --fps (default 20),
-  --width (default 720, max 900) tune length/size.
+  everywhere and is the smallest. The holo makes one calm pass then rests (~12s
+  loop). --frames (default 180 @ --fps 15; apng 60 @ fps 5 since it can't delta-
+  compress the static rest), --width (default 720, max 900) tune length/size.
   On the animated render an ${bold("UNSIGNED")} persona is auto-given an identity (a
   keypair is minted, the persona signed in place, the private key saved beside it
   as <id>.key — keep it secret, never commit it) so the card shows a real ROLLED

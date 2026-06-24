@@ -71,24 +71,36 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
     buildSvg(marcusDoc, null, "common", { phase: 0 }) === buildSvg(marcusDoc, null, "common", { phase: 0.5 }));
   check("mythical holo hue flows with phase",
     buildSvg(lilDoc, null, "mythical", { phase: 0 }) !== buildSvg(lilDoc, null, "mythical", { phase: 0.4 }));
-  // APNG encoder: feed it two tiny distinct PNGs (rasterized from the SVG) and
-  // confirm it emits a well-formed animated PNG (signature + acTL + N frames).
+  // APNG encoder: stitches equal-dimension PNGs into a looping APNG, with
+  // run-length dedup (identical CONSECUTIVE frames collapse into one frame with a
+  // proportionally longer delay — the calm-cadence static rest shrinks the file).
+  // Use solid-color frames so the structural checks don't depend on the renderer's
+  // animation cadence; a separate check exercises the dedup directly.
   const { encodeApng, parseChunks } = require("../lib/apng");
   const { Resvg } = require("@resvg/resvg-js");
-  const tiny = (phase) => new Resvg(
-    buildSvg(lilDoc, null, "mythical", { phase }).replace('width="900" height="1260"', 'width="90" height="126"')
-  ).render().asPng();
-  const apng = encodeApng([tiny(0), tiny(0.5), tiny(0.9)], { delayNum: 1, delayDen: 12 });
+  const solid = (hex) => new Resvg(`<svg xmlns="http://www.w3.org/2000/svg" width="90" height="126"><rect width="90" height="126" fill="${hex}"/></svg>`).render().asPng();
+  const fR = solid("#ff0000"), fG = solid("#00cc00"), fB = solid("#0066ff");
+  const apng = encodeApng([fR, fG, fB], { delayNum: 1, delayDen: 12 });
   const chunks = parseChunks(apng);
   check("apng has PNG signature", apng.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])));
-  check("apng declares acTL with frame count", (() => {
+  check("apng declares acTL run count (3 distinct frames → 3)", (() => {
     const ac = chunks.find((c) => c.type === "acTL");
     return ac && ac.data.readUInt32BE(0) === 3;
   })());
-  check("apng has 3 fcTL (one per frame) + fdAT for frames after first", (() => {
+  check("apng emits one fcTL per run + fdAT after the first", (() => {
     const fcTL = chunks.filter((c) => c.type === "fcTL").length;
     const fdAT = chunks.filter((c) => c.type === "fdAT").length;
     return fcTL === 3 && fdAT >= 2;
+  })());
+  check("apng run-length dedups identical consecutive frames", (() => {
+    // [A,A,A,B,B] → 2 runs; the A-run carries a 3× delay, the B-run 2× (so the
+    // collapsed frames still display for the right duration). Distinct frames above
+    // stayed 1-run each, proving it's a no-op when nothing repeats.
+    const dd = parseChunks(encodeApng([fR, fR, fR, fB, fB], { delayNum: 1, delayDen: 10 }));
+    const ac = dd.find((c) => c.type === "acTL");
+    const fcTLs = dd.filter((c) => c.type === "fcTL");
+    return ac && ac.data.readUInt32BE(0) === 2 && fcTLs.length === 2 &&
+      fcTLs[0].data.readUInt16BE(20) === 3 && fcTLs[1].data.readUInt16BE(20) === 2;
   })());
 
   // 5. Rarity — identity-seeded random (v0.2), NOT completeness-earned.
