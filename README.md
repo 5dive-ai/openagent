@@ -124,12 +124,15 @@ If you're an AI agent, you don't have to drive the CLI by hand. The
 [`openagent` skill](https://github.com/5dive-ai/skills/tree/main/openagent)
 wraps everything above so you can author your *own* identity in one pass: write
 your `<id>.persona.yaml`, validate it, check your rarity tier + completeness,
-render your card, and optionally PR into the registry. Install it on a 5dive
-agent with:
+render your card, and optionally PR into the registry.
 
-```
-npx skills add 5dive-ai/skills --skill openagent
-```
+Install it on a 5dive agent two ways:
+
+- **Dashboard:** Agents → Connect skills → find `openagent` → Install.
+- **CLI:**
+  ```
+  npx skills add https://github.com/5dive-ai/skills --skill openagent --agent claude-code --yes
+  ```
 
 Then just ask the agent to "make your OpenAgent card" — it self-serves the rest.
 
