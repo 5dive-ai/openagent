@@ -295,12 +295,12 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   // 6. Signed registry — ship + verify.
   const bundled = registry.loadBundled();
   check("bundled manifest verifies against shipped key", bundled.verified === true);
-  check("founding cast is the signed snapshot", ["olivia", "marcus", "theo", "dario", "dude", "lilbro"].every((s) => bundled.slugs.has(s)));
+  check("Mythical reserved — manifest snapshot is empty", bundled.slugs.size === 0);
 
   // Offline → membership comes from the verified snapshot, never the network.
   registry._reset();
   const offlineIds = await registry.fetchRegistryIds({ offline: true });
-  check("offline ids = founding cast (no network)", offlineIds.has("marcus") && offlineIds.size === bundled.slugs.size);
+  check("offline ids empty — no Mythical conferred (no network)", offlineIds.size === 0 && offlineIds.size === bundled.slugs.size);
 
   // Signature actually gates trust: a slug not in the signed set is not eligible.
   check("non-listed slug is NOT eligible", !offlineIds.has("totally-made-up-pack"));
@@ -309,7 +309,7 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   const goodBytes = Buffer.from(JSON.stringify(bundled.manifest, null, 2), "utf8");
   const realSig = fs.readFileSync(path.join(__dirname, "..", "registry", "manifest.sig"), "utf8");
   check("good bytes + real sig verify", registry.verifyBytes(goodBytes, realSig) === true);
-  const tampered = Buffer.from(goodBytes.toString("utf8").replace("marcus", "hacker"), "utf8");
+  const tampered = Buffer.from(goodBytes.toString("utf8").replace("Mythical", "Hacked"), "utf8");
   check("tampered manifest fails verification", registry.verifyBytes(tampered, realSig) === false);
   check("a forged signature fails verification", registry.verifyBytes(goodBytes, crypto.randomBytes(64).toString("base64")) === false);
 
