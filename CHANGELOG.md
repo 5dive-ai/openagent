@@ -15,6 +15,26 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-06-24 · CLI only
+### Added — did:key public addresses (DIVE-668)
+- Every OpenAgent now has a portable **public address**: a `did:key` derived
+  from its ed25519 public key (the existing `keygen`/`created_by.key`). It is
+  the W3C standard form (`did:key:z6Mk…` = multibase base58btc + ed25519
+  multicodec `0xed01`), so addresses interoperate with the wider DID /
+  agent-identity ecosystem — the identity layer on top of A2A/AgentCard.
+- `keygen` now prints the `did:key` address alongside the keypair.
+- New `openagent address <persona | pubkey-file> [--json]` derives and prints
+  the `did:key` from a persona's `provenance.created_by.key` or a raw public key.
+- `card` prints a short form of the address (the `z…<tail>`) on the frame as a
+  verifiable handle (signed personas only; unsigned cards are byte-identical).
+- `verify` resolves `provenance.created_by.key → did:key` and shows it next to
+  the signature it checks against ("this card really is that agent"); the
+  verdict object gains a `did` field.
+- Library: `provenance.didKeyFromPublicKey`, `shortDidKey`, `base58btcEncode`;
+  interoperability checked against a published W3C did:key test vector.
+- _Canonical model: `did:key` = public address · `id` slug = human nickname ·
+  character-packs registry = canonical-handle authority (SPEC text to follow)._
+
 ## [0.13.0] — 2026-06-24 · CLI only
 
 Animated cards — "holo in motion" (DIVE-665).

@@ -7,7 +7,7 @@ const { renderCard, renderAnimatedCard, resolveFace, fetchRegistryIds, hasFfmpeg
 const { computeTier, computeBadges, nextRung, rungNeeds, TIER_STYLE } = require("../lib/tier");
 const { registryStatus } = require("../lib/registry");
 const { speak } = require("../lib/speak");
-const { generateKeypair, signPersona, verifyPersona } = require("../lib/provenance");
+const { generateKeypair, signPersona, verifyPersona, didKeyFromPublicKey, shortDidKey } = require("../lib/provenance");
 const { flow } = require("../lib/flow");
 const YAML = require("yaml");
 const fs = require("fs");
@@ -57,6 +57,7 @@ ${bold("Usage")}
   openagent registry [--json] [--offline]
   openagent speak <persona-file> "<text>" [-o <out.wav>] [--voice <name>]
   openagent keygen [-o <prefix>]
+  openagent address <persona-file | pubkey-file> [--json]
   openagent sign <persona-file> --key <privkey.pem> [--name <n>] [--url <u>] [--derived-from <id[:source]>] [-o <out>]
   openagent verify <persona-file> [--json]
   openagent flow <persona-file> "<scene>" [--json]
@@ -113,7 +114,15 @@ ${bold("speak")}
 ${bold("keygen")}
   Generates a fresh ed25519 identity keypair. Prints the public + private PEM,
   or with -o writes <prefix>.pub / <prefix>.key. The public key IS the author
-  identity embedded in a persona; keep the private key secret.
+  identity embedded in a persona; keep the private key secret. Also prints the
+  ${bold("did:key")} public address derived from the public key.
+
+${bold("address")}
+  Prints the agent's portable PUBLIC ADDRESS as a did:key (W3C standard,
+  did:key:z6Mk… = multibase base58btc + ed25519 multicodec) derived from its
+  public key. Pass a persona file (reads provenance.created_by.key) or a raw
+  ed25519 public-key file (PEM or base64). The did:key is the canonical public
+  address; the persona id is a human nickname. --json for scripting.
 
 ${bold("sign")}
   Stamps per-file provenance into a persona: embeds your public key under
@@ -136,6 +145,7 @@ ${bold("Examples")}
   openagent registry
   GEMINI_API_KEY=… openagent speak marcus.persona.yaml "ship it." -o marcus.wav
   openagent keygen -o ana
+  openagent address vera.persona.yaml          # did:key public address
   openagent sign vera.persona.yaml --key ana.key --name "ana" --derived-from marcus
   openagent verify vera.persona.yaml
   openagent flow marcus.persona.yaml "at his desk reviewing a pull request, late evening"
@@ -320,17 +330,70 @@ function cmdKeygen(args) {
     if (args[i] === "-o" || args[i] === "--out") out = args[++i];
   }
   const kp = generateKeypair();
+  const did = didKeyFromPublicKey(kp.publicKey);
   if (out) {
     fs.writeFileSync(`${out}.pub`, kp.publicKey + "\n");
     fs.writeFileSync(`${out}.key`, kp.privateKey + "\n", { mode: 0o600 });
     process.stdout.write(
       `${green("✓ KEYGEN")}  ${out}.pub ${dim("(public — embed in personas)")}\n` +
-        `          ${out}.key ${dim("(private — keep secret, never commit)")}\n`
+        `          ${out}.key ${dim("(private — keep secret, never commit)")}\n` +
+        `          ${dim("address")} ${did}\n`
     );
     return 0;
   }
+  process.stdout.write(`${bold("public address")} ${dim("(did:key — verifiable, portable)")}\n${did}\n\n`);
   process.stdout.write(`${bold("public key")} ${dim("(identity — safe to share / embed)")}\n${kp.publicKey}\n\n`);
   process.stdout.write(`${bold("private key")} ${dim("(KEEP SECRET — never commit)")}\n${kp.privateKey}\n`);
+  return 0;
+}
+
+// openagent address <persona | pubkey-file> [--json]
+// Derives the did:key public address from either a persona's
+// provenance.created_by.key or a raw ed25519 public key (PEM / base64).
+function cmdAddress(args) {
+  const json = args.includes("--json");
+  const file = args.find((a) => !a.startsWith("-"));
+  if (!file) {
+    process.stderr.write(red("address: no persona or public-key file given\n\n") + USAGE);
+    return 2;
+  }
+  let raw;
+  try {
+    raw = fs.readFileSync(file, "utf8");
+  } catch (e) {
+    if (json) process.stdout.write(JSON.stringify({ ok: false, error: e.message }, null, 2) + "\n");
+    else process.stderr.write(red(`address: ${e.message}\n`));
+    return 2;
+  }
+  // Persona doc (object with provenance.created_by.key) vs. a bare key file.
+  let key = null,
+    source = "public key";
+  let doc = null;
+  try {
+    doc = YAML.parse(raw);
+  } catch (_) {
+    /* not YAML — treat the file as a raw key below */
+  }
+  if (doc && typeof doc === "object" && doc.provenance && doc.provenance.created_by && doc.provenance.created_by.key) {
+    key = doc.provenance.created_by.key;
+    source = "persona created_by.key";
+  } else {
+    key = raw.trim();
+  }
+  let did;
+  try {
+    did = didKeyFromPublicKey(key);
+  } catch (e) {
+    const msg = `${file} has no derivable ed25519 public address: ${e.message}`;
+    if (json) process.stdout.write(JSON.stringify({ ok: false, error: msg }, null, 2) + "\n");
+    else process.stderr.write(red(`address: ${msg}\n`));
+    return 1;
+  }
+  if (json) {
+    process.stdout.write(JSON.stringify({ ok: true, file, source, did, short: shortDidKey(did) }, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(`${bold("public address")} ${dim(`(did:key · from ${source})`)}\n${did}\n`);
   return 0;
 }
 
@@ -437,6 +500,7 @@ function cmdVerify(args) {
   }
   const who = (r.createdBy && (r.createdBy.name || r.createdBy.url)) || "anonymous key";
   process.stdout.write(`${green("✓ VERIFIED")} ${file} ${dim(`· signed by ${who}`)}\n`);
+  if (r.did) process.stdout.write(`  ${dim("address")} ${r.did}\n`);
   if (r.derivedFrom && r.derivedFrom.length) {
     for (const d of r.derivedFrom) {
       process.stdout.write(`  ${dim("↳ " + (d.relation || "fork") + " of")} ${d.id}${d.source ? dim(` (${d.source})`) : ""}\n`);
@@ -573,6 +637,7 @@ async function main(argv) {
   if (cmd === "registry") return cmdRegistry(rest);
   if (cmd === "speak") return cmdSpeak(rest);
   if (cmd === "keygen") return cmdKeygen(rest);
+  if (cmd === "address") return cmdAddress(rest);
   if (cmd === "sign") return cmdSign(rest);
   if (cmd === "verify") return cmdVerify(rest);
   if (cmd === "flow") return cmdFlow(rest);

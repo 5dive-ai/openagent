@@ -331,6 +331,43 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   delete opsBase.provenance;
   check("provenance does not affect computed tier", computeTier(opsDoc, { faceResolved: true }).tier === computeTier(opsBase, { faceResolved: true }).tier);
 
+  // 8b. did:key public address (DIVE-668) — portable, verifiable agent address.
+  // base58btc encoder against the canonical "hello world" vector.
+  check("base58btc encodes the canonical vector",
+    provenance.base58btcEncode(Buffer.from("hello world")) === "StV1DL6CwTryKyV");
+  check("base58btc keeps leading-zero bytes as '1'",
+    provenance.base58btcEncode(Buffer.from([0, 0, 1])) === "112");
+  // Every ed25519 key renders as a did:key:z6Mk… address.
+  const didKp = provenance.generateKeypair();
+  const did = provenance.didKeyFromPublicKey(didKp.publicKey);
+  check("did:key has the ed25519 z6Mk prefix", /^did:key:z6Mk[1-9A-HJ-NP-Za-km-z]+$/.test(did));
+  // Stable: PEM and bare-base64 DER forms of the same key give the same address.
+  const bareB64 = didKp.publicKey.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  check("did:key is form-independent (PEM == bare base64)", provenance.didKeyFromPublicKey(bareB64) === did);
+  // Decodes back to 0xed01 multicodec prefix + the raw 32-byte public key.
+  const decoded = (() => {
+    const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const s = did.slice("did:key:z".length);
+    let n = 0n;
+    for (const c of s) n = n * 58n + BigInt(B58.indexOf(c));
+    let hex = n.toString(16);
+    if (hex.length % 2) hex = "0" + hex;
+    return Buffer.from(hex, "hex");
+  })();
+  check("did:key decodes to 0xed01 + 32 bytes", decoded.length === 34 && decoded[0] === 0xed && decoded[1] === 0x01);
+  check("non-ed25519 input is rejected", (() => {
+    try { provenance.didKeyFromPublicKey("not a key"); return false; } catch (_) { return true; }
+  })());
+  // verify resolves created_by.key → the same did:key the address command prints.
+  check("verify resolves the signer's did:key address", opsVerdict.did === provenance.didKeyFromPublicKey(opsDoc.provenance.created_by.key));
+  // shortDidKey keeps the multibase marker + tail for the card handle.
+  const short = provenance.shortDidKey(did);
+  check("shortDidKey keeps z marker + tail", short.startsWith("z…") && did.endsWith(short.slice(2)));
+  // Signed personas carry the handle on the card; unsigned ones stay byte-identical.
+  const cardWithDid = buildSvg(opsDoc, null, "legendary");
+  check("signed persona's card shows the did:key handle", cardWithDid.includes(provenance.shortDidKey(opsVerdict.did)));
+  check("unsigned persona's card carries no did handle", !buildSvg(marcusDoc, null, "rare").includes("z…"));
+
   // 8. Conformance suite — run the portable manifest against this impl.
   console.log("\n-- conformance suite --");
   failures += runConformance();
