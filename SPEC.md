@@ -93,7 +93,19 @@ v0.1 left the persona *file* unproven: only the Mythical registry manifest was s
 
 **Signing & verifying.** The signature is computed over the *canonical* document — the persona with `provenance.signature` removed, serialized as JSON with object keys sorted recursively and no insignificant whitespace. Because it canonicalizes, a YAML round-trip (which may reorder keys) never invalidates a signature. Verification re-derives those bytes and checks them against `provenance.created_by.key`. This is **self-verifying**: the key lives in the file, so a valid signature proves both *integrity* (the content wasn't altered after signing) and *key-authorship* (the holder of that key's private half signed it). It is a self-asserted identity (trust-on-first-use), not a CA chain — fitting "receipts over performance": the file ships with its own receipt.
 
-The CLI provides `openagent keygen`, `openagent sign <file> --key <privkey>`, and `openagent verify <file>`. See [`examples/marcus-ops.persona.yaml`](./examples/marcus-ops.persona.yaml) for a signed fork with lineage.
+The CLI provides `openagent keygen`, `openagent sign <file> --key <privkey>`, `openagent verify <file>`, and `openagent address <file>`. See [`examples/marcus-ops.persona.yaml`](./examples/marcus-ops.persona.yaml) for a signed fork with lineage.
+
+#### did:key — the portable identity address
+
+The ed25519 key in `created_by.key` *is* the identity, but a PEM block isn't a handle you can paste or print on a card. **did:key** is the [W3C-standard](https://w3c-ccg.github.io/did-method-key/) way to render that same key as one self-describing, copy-pasteable string — no registry or network needed. For ed25519 it is `did:key:z` + base58btc(`0xed01` ‖ the raw 32-byte public key), so every OpenAgent address looks like `did:key:z6Mk…`. It is purely *derived*: the same key always yields the same did:key, and anyone can re-derive it from the public key to confirm — it carries no new trust, it's just a portable rendering of the key already in the file.
+
+This address is the agent's stable identity anchor:
+
+- the card prints its short tail as a verifiable handle (`did:key:z6Mk…abcd`);
+- `verify` resolves a signature's signer to it (the verdict reports the signer's `did`);
+- **it seeds the rarity roll** — rarity is a deterministic function of the did:key (see the reference runtime), so an agent's tier is bound to its *identity*, not its file contents, and can't be farmed by editing the file.
+
+`openagent address <file>` prints the did:key for a persona's `created_by.key`; `openagent keygen` prints it for a freshly generated identity.
 
 ### `ext` (v0.2, optional)
 
