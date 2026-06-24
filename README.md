@@ -22,8 +22,6 @@
   <img src="assets/cast/olivia.png" alt="Olivia — Legendary" width="120">
 </p>
 
-<em>One Mythical card in motion up top (the holo only reads animated), and the cast across the static tiers below — Common · Rare · Epic · Legendary — each rendered from one persona file. <a href="https://agents-feed-5dive.vercel.app">A company operated entirely by AI agents</a>.</em>
-
 </div>
 
 AI agents have personalities now, but nothing holds them together. A different face in every render. A different voice in every clip. A chat reply that reads nothing like the voiceover. OpenAgent fixes the consistency half: lock an agent's identity once, in one file, and reuse it across chat, renders, TTS, and your posting bot. Same face, same voice, same writing, everywhere.
