@@ -95,6 +95,23 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   const flowed = computeTier(docBad, { faceResolved: true, schemaValid: validate(docBad).ok });
   check("validate(doc) verdict flows to Ungraded", flowed.level === 0);
 
+  // face.recipe — optional regenerable likeness, additive + back-compat (DIVE-649).
+  const withRecipe = JSON.parse(JSON.stringify(marcusDoc));
+  withRecipe.face.recipe = { model: "imagen-4", prompt: "p", seed: 481516 };
+  check("face.recipe (full) validates", validate(withRecipe).ok === true);
+  const strSeed = JSON.parse(JSON.stringify(withRecipe));
+  strSeed.face.recipe.seed = "hex-abc";
+  check("face.recipe accepts string seed", validate(strSeed).ok === true);
+  const noSeed = JSON.parse(JSON.stringify(withRecipe));
+  delete noSeed.face.recipe.seed;
+  check("face.recipe seed is optional", validate(noSeed).ok === true);
+  const noPrompt = JSON.parse(JSON.stringify(withRecipe));
+  delete noPrompt.face.recipe.prompt;
+  check("face.recipe requires prompt", validate(noPrompt).ok === false);
+  const noRecipe = JSON.parse(JSON.stringify(marcusDoc));
+  delete noRecipe.face.recipe;
+  check("face without recipe still validates (0.1 back-compat)", validate(noRecipe).ok === true);
+
   // 6. Signed registry — ship + verify.
   const bundled = registry.loadBundled();
   check("bundled manifest verifies against shipped key", bundled.verified === true);

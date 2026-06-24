@@ -20,7 +20,18 @@
         "ref": { "type": "string" },
         "anchor": { "type": "string" },
         "full": { "type": "string" },
-        "sprite": { "type": "string" }
+        "sprite": { "type": "string" },
+        "recipe": {
+          "type": "object",
+          "description": "optional regeneration recipe — makes the canonical likeness reproducible (model + prompt + seed) the same way voice is from base + style, instead of a single frozen PNG.",
+          "required": ["model", "prompt"],
+          "additionalProperties": false,
+          "properties": {
+            "model": { "type": "string", "description": "the named image model that produced ref (e.g. \"imagen-4\", \"flux-1.1-pro\")." },
+            "prompt": { "type": "string", "description": "the generation prompt that yields the canonical likeness." },
+            "seed": { "type": ["integer", "string"], "description": "the seed used; pin it for deterministic re-gens (omit if the model exposes none)." }
+          }
+        }
       }
     },
     "voice": {

@@ -31,6 +31,10 @@ role: CTO / Founding Engineer
 face:
   ref: ./faces/marcus.png        # the locked anchor
   anchor: "mid-30s, even expression, lived-in startup background, warm f/2 bokeh"
+  recipe:                        # optional — regenerable likeness, like voice's base+style
+    model: imagen-4
+    prompt: "portrait of a mid-30s engineer, even expression, lived-in startup office, warm f/2 bokeh, 85mm"
+    seed: 481516
 voice:
   audio:
     base: Sadaltager                 # the named underlying voice

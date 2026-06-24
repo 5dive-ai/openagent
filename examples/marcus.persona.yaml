@@ -6,6 +6,10 @@ face:
   ref: ./faces/marcus.png
   anchor: "mid-30s, even unbothered expression, lived-in startup background thrown to warm f/2 bokeh, desk-lamp glow"
   sprite: ./faces/marcus-sprites.png
+  recipe:                  # regenerable likeness — re-render ref / drive sprites + reels on-model
+    model: imagen-4
+    prompt: "portrait of a mid-30s software engineer, even unbothered expression, slight stubble, lived-in startup office thrown to warm f/2 bokeh, desk-lamp glow, photoreal, 85mm"
+    seed: 481516
 voice:
   audio:
     base: unset            # lodar to name Marcus's base voice (custom Flow voice sits on a named base)

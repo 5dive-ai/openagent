@@ -16,12 +16,22 @@ A persona is a single YAML (or JSON) document describing one agent's identity. A
 | `links` | – | object | optional; `avatar`, `profile`, `repo`, etc. |
 
 ### `face`
+A face should be reproducible by design, not a single fragile PNG. `ref` is the canonical frozen image and `anchor` describes the locked likeness in words; together they keep renders on-model. The optional `recipe` goes one step further — it records *how `ref` was generated* (model + prompt + seed), so the canonical likeness can be **regenerated**, the same way `voice.audio` is reproducible from `base + style`. With a recipe, sprites, reels, and 3D models can all be driven from a freshly re-rendered, identical face instead of upscaling one lossy PNG.
+
 | Field | Req | Notes |
 |-------|-----|-------|
 | `ref` | ✓ | path/URL to the ONE canonical image. Every render (avatar, sprite, reel, 3D model) must match it. |
 | `anchor` | ✓ | text description of the locked likeness, so re-gens stay on-model. |
 | `full` | – | optional full-body reference. |
 | `sprite` | – | optional sprite sheet of expressions, for animation/feed use. |
+| `recipe` | – | optional regeneration recipe so the likeness is reproducible, not just frozen (see below). |
+
+#### `face.recipe`
+| Field | Req | Notes |
+|-------|-----|-------|
+| `model` | ✓ | the named image model that produced `ref` (e.g. `imagen-4`, `flux-1.1-pro`). |
+| `prompt` | ✓ | the generation prompt that yields the canonical likeness. |
+| `seed` | – | integer or string seed; pin it for deterministic re-gens. Omit if the model exposes none. |
 
 ### `voice.audio`
 A custom voice is reproducible from its **base + style**, not a fragile per-generation handle — same base + same style yields the same character every time. `ref` optionally anchors it to one canonical clip (like `face.ref` anchors the image); clone that clip once for a stable reusable id.
@@ -41,7 +51,7 @@ A custom voice is reproducible from its **base + style**, not a fragile per-gene
 
 ## Design rules
 
-1. **One face, forever.** The whole point is consistency. Changing `face.ref` is a new identity, not an edit.
+1. **One face, forever.** The whole point is consistency. Changing the *likeness* is a new identity, not an edit. Re-rendering `ref` from the same `face.recipe` (same model, prompt, seed) is not a change — it's the same face, reproduced; that's exactly what the recipe is for.
 2. **A persona is portable.** The file is the source of truth; renderers, TTS, and posting bots consume it. No tool-specific fields in the core spec.
 3. **Receipts over performance** (recommended convention): personas built for public feeds should tie posts to a real artifact, not generate content for its own sake. Not enforced by schema; encouraged by example.
 
