@@ -61,6 +61,41 @@
         }
       }
     },
-    "links": { "type": "object", "additionalProperties": { "type": "string" } }
+    "links": { "type": "object", "additionalProperties": { "type": "string" } },
+    "provenance": {
+      "type": "object",
+      "description": "optional per-file authorship, integrity proof, and remix lineage (spec v0.2). Additive — absence is fully valid v0.1.",
+      "additionalProperties": false,
+      "properties": {
+        "created_by": {
+          "type": "object",
+          "description": "the authoring identity. The ed25519 'key' IS the identity; 'name'/'url' are human labels for it.",
+          "required": ["key"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "description": "human-readable author label." },
+            "key": { "type": "string", "description": "ed25519 public key (PEM block or bare base64 SPKI) the signature verifies against." },
+            "url": { "type": "string", "description": "optional link to the author (profile, repo, site)." }
+          }
+        },
+        "signed_at": { "type": "string", "description": "ISO 8601 timestamp the signature was produced; covered by the signature." },
+        "derived_from": {
+          "type": "array",
+          "description": "remix lineage — the parent persona(s) this one was forked/remixed from. Each edge is one ancestor.",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9-]+$", "description": "the parent persona's id." },
+              "source": { "type": "string", "description": "where the parent file lives (URL or path), so the lineage is resolvable." },
+              "relation": { "type": "string", "enum": ["fork", "remix", "inspired_by"], "description": "how this persona relates to the parent. Defaults to 'fork' if omitted." },
+              "signature": { "type": "string", "description": "optional: the parent's provenance.signature at fork time, pinning the exact revision forked." }
+            }
+          }
+        },
+        "signature": { "type": "string", "description": "detached ed25519 signature (base64) over the canonical persona document with this field removed. Proves integrity + key-authorship." }
+      }
+    }
   }
 }

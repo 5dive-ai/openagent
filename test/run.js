@@ -6,6 +6,7 @@ const { validateFile, validate } = require("../lib/validate");
 const { buildSvg, resolveFace } = require("../lib/card");
 const { computeTier } = require("../lib/tier");
 const registry = require("../lib/registry");
+const provenance = require("../lib/provenance");
 const crypto = require("crypto");
 const YAML = require("yaml");
 const fs = require("fs");
@@ -25,7 +26,7 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
 
 (async () => {
   // 1. Shipped examples validate.
-  for (const f of ["marcus.persona.yaml", "lilbro.persona.yaml"]) {
+  for (const f of ["marcus.persona.yaml", "lilbro.persona.yaml", "marcus-ops.persona.yaml"]) {
     const r = validateFile(path.join(examples, f));
     check(`${f} validates`, r.ok === true);
     if (!r.ok) console.log("    errors:", r.errors);
@@ -136,6 +137,64 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   // slugsOf reads both the slim bundled shape and the full character-packs index.
   check("slugsOf reads packs[].slug shape", registry.slugsOf({ packs: [{ slug: "a" }, { slug: "b" }] }).join() === "a,b");
   check("slugsOf reads slugs[] shape", registry.slugsOf({ slugs: ["x", "y"] }).join() === "x,y");
+
+  // 7. Per-file provenance — created_by + signature + remix lineage (DIVE-651).
+  // Back-compat: v0.1 files (no provenance) still validate, and verify cleanly
+  // reports them as unsigned.
+  check("v0.1 persona (no provenance) still validates", validate(marcusDoc).ok === true);
+  const unsignedVerdict = provenance.verifyPersona(marcusDoc);
+  check("unsigned persona → signed:false, ok:false", unsignedVerdict.signed === false && unsignedVerdict.ok === false);
+
+  // Schema accepts provenance and its sub-shapes.
+  const provOnlyLineage = JSON.parse(JSON.stringify(marcusDoc));
+  provOnlyLineage.provenance = { derived_from: [{ id: "lilbro", relation: "remix" }] };
+  check("provenance with only derived_from validates", validate(provOnlyLineage).ok === true);
+  const badRelation = JSON.parse(JSON.stringify(provOnlyLineage));
+  badRelation.provenance.derived_from[0].relation = "stolen-from";
+  check("derived_from.relation enum is enforced", validate(badRelation).ok === false);
+  const createdByNoKey = JSON.parse(JSON.stringify(marcusDoc));
+  createdByNoKey.provenance = { created_by: { name: "anon" } };
+  check("created_by without key is rejected", validate(createdByNoKey).ok === false);
+  const badProvField = JSON.parse(JSON.stringify(marcusDoc));
+  badProvField.provenance = { author: "nope" };
+  check("unknown provenance field is rejected", validate(badProvField).ok === false);
+
+  // Sign → verify round-trip with a freshly generated identity.
+  const kp = provenance.generateKeypair();
+  check("keygen yields a PEM keypair", /BEGIN PUBLIC KEY/.test(kp.publicKey) && /BEGIN PRIVATE KEY/.test(kp.privateKey));
+  const signed = provenance.signPersona(marcusDoc, { privateKey: kp.privateKey, name: "tester", signedAt: "2026-06-24T00:00:00Z" });
+  check("signPersona is pure (input untouched)", marcusDoc.provenance === undefined);
+  check("signed persona embeds the public key", signed.provenance.created_by.key === kp.publicKey);
+  check("signed persona still validates against the schema", validate(signed).ok === true);
+  const rt = provenance.verifyPersona(signed);
+  check("round-trip signature verifies", rt.signed === true && rt.ok === true);
+
+  // Integrity: any content change after signing breaks verification.
+  const tamperedDoc = JSON.parse(JSON.stringify(signed));
+  tamperedDoc.behavior = tamperedDoc.behavior + " (tampered)";
+  check("tampering content fails verification", provenance.verifyPersona(tamperedDoc).ok === false);
+  const wrongKey = JSON.parse(JSON.stringify(signed));
+  wrongKey.provenance.created_by.key = provenance.generateKeypair().publicKey;
+  check("swapping the key fails verification", provenance.verifyPersona(wrongKey).ok === false);
+
+  // Canonicalisation: a YAML round-trip / key reorder must NOT break the sig.
+  const reordered = YAML.parse(YAML.stringify(signed));
+  check("YAML round-trip preserves the signature", provenance.verifyPersona(reordered).ok === true);
+  const sigless = JSON.parse(JSON.stringify(signed));
+  delete sigless.provenance.signature;
+  const a = provenance.canonicalBytes(signed).toString();
+  const b = provenance.canonicalBytes(sigless).toString();
+  check("canonicalBytes ignores the signature field itself", a === b);
+
+  // The committed signed example self-verifies and declares lineage.
+  const opsDoc = load(path.join(examples, "marcus-ops.persona.yaml"));
+  const opsVerdict = provenance.verifyPersona(opsDoc);
+  check("marcus-ops example signature verifies", opsVerdict.signed === true && opsVerdict.ok === true);
+  check("marcus-ops declares derived_from marcus", opsDoc.provenance.derived_from[0].id === "marcus");
+  // Provenance is independent of the rarity ladder — adding it changes no tier.
+  const opsBase = JSON.parse(JSON.stringify(opsDoc));
+  delete opsBase.provenance;
+  check("provenance does not affect computed tier", computeTier(opsDoc, { faceResolved: true }).tier === computeTier(opsBase, { faceResolved: true }).tier);
 
   if (failures) {
     console.log(`\n${failures} test(s) failed`);

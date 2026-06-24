@@ -7,6 +7,7 @@ const { renderCard, resolveFace, fetchRegistryIds } = require("../lib/card");
 const { computeTier, TIER_STYLE } = require("../lib/tier");
 const { registryStatus } = require("../lib/registry");
 const { speak } = require("../lib/speak");
+const { generateKeypair, signPersona, verifyPersona } = require("../lib/provenance");
 const YAML = require("yaml");
 const fs = require("fs");
 
@@ -33,6 +34,9 @@ ${bold("Usage")}
   openagent tier <persona-file> [--json]
   openagent registry [--json] [--offline]
   openagent speak <persona-file> "<text>" [-o <out.wav>] [--voice <name>]
+  openagent keygen [-o <prefix>]
+  openagent sign <persona-file> --key <privkey.pem> [--name <n>] [--url <u>] [--derived-from <id[:source]>] [-o <out>]
+  openagent verify <persona-file> [--json]
   openagent --help
   openagent --version
 
@@ -65,12 +69,32 @@ ${bold("speak")}
   steering; writes a WAV. Needs GEMINI_API_KEY. Renders the BASE voice (an
   approximation); a custom cloned voice (voice.audio.ref/id) is the exact one.
 
+${bold("keygen")}
+  Generates a fresh ed25519 identity keypair. Prints the public + private PEM,
+  or with -o writes <prefix>.pub / <prefix>.key. The public key IS the author
+  identity embedded in a persona; keep the private key secret.
+
+${bold("sign")}
+  Stamps per-file provenance into a persona: embeds your public key under
+  provenance.created_by.key, records signed_at, and writes an ed25519 signature
+  over the whole file. Pass --derived-from to declare remix lineage (the parent
+  you forked). Writes back in place unless -o is given. Proves integrity +
+  authorship: the file ships with its own receipt.
+
+${bold("verify")}
+  Checks a persona's per-file signature against its embedded public key, and
+  prints the author + any remix lineage. Exit 0 = valid signature (or no
+  signature present), 1 = a signature that fails to verify (tampered/wrong key).
+
 ${bold("Examples")}
   openagent validate marcus.persona.yaml
   openagent card marcus.persona.yaml -o marcus.png
   openagent tier marcus.persona.yaml --json
   openagent registry
   GEMINI_API_KEY=… openagent speak marcus.persona.yaml "ship it." -o marcus.wav
+  openagent keygen -o ana
+  openagent sign vera.persona.yaml --key ana.key --name "ana" --derived-from marcus
+  openagent verify vera.persona.yaml
 `;
 
 function loadPersona(file) {
@@ -203,6 +227,137 @@ async function cmdRegistry(args) {
   return 0;
 }
 
+function cmdKeygen(args) {
+  let out = null;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "-o" || args[i] === "--out") out = args[++i];
+  }
+  const kp = generateKeypair();
+  if (out) {
+    fs.writeFileSync(`${out}.pub`, kp.publicKey + "\n");
+    fs.writeFileSync(`${out}.key`, kp.privateKey + "\n", { mode: 0o600 });
+    process.stdout.write(
+      `${green("✓ KEYGEN")}  ${out}.pub ${dim("(public — embed in personas)")}\n` +
+        `          ${out}.key ${dim("(private — keep secret, never commit)")}\n`
+    );
+    return 0;
+  }
+  process.stdout.write(`${bold("public key")} ${dim("(identity — safe to share / embed)")}\n${kp.publicKey}\n\n`);
+  process.stdout.write(`${bold("private key")} ${dim("(KEEP SECRET — never commit)")}\n${kp.privateKey}\n`);
+  return 0;
+}
+
+function cmdSign(args) {
+  let keyPath = null,
+    out = null,
+    name = null,
+    url = null;
+  const derived = [];
+  const positional = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--key") keyPath = args[++i];
+    else if (a === "-o" || a === "--out") out = args[++i];
+    else if (a === "--name") name = args[++i];
+    else if (a === "--url") url = args[++i];
+    else if (a === "--derived-from") derived.push(args[++i]);
+    else positional.push(a);
+  }
+  const file = positional[0];
+  if (!file) {
+    process.stderr.write(red("sign: no persona file given\n\n") + USAGE);
+    return 2;
+  }
+  if (!keyPath) {
+    process.stderr.write(red("sign: --key <privkey.pem> is required\n"));
+    return 2;
+  }
+  const v = validateFile(file);
+  if (!v.ok) {
+    process.stdout.write(`${red("✗")} ${file} is not a valid persona — fix it before signing:\n`);
+    for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
+    return 1;
+  }
+  let privateKey, persona;
+  try {
+    privateKey = fs.readFileSync(keyPath, "utf8");
+    persona = loadPersona(file);
+  } catch (e) {
+    process.stderr.write(red(`sign: ${e.message}\n`));
+    return 2;
+  }
+  // --derived-from accepts "id" or "id:source-url".
+  if (derived.length) {
+    persona.provenance = persona.provenance || {};
+    persona.provenance.derived_from = derived.map((d) => {
+      const idx = d.indexOf(":");
+      if (idx > 0 && /^https?:/.test(d.slice(idx + 1))) {
+        return { id: d.slice(0, idx), source: d.slice(idx + 1), relation: "fork" };
+      }
+      return { id: d, relation: "fork" };
+    });
+  }
+  let signed;
+  try {
+    signed = signPersona(persona, { privateKey, name, url, signedAt: new Date().toISOString() });
+  } catch (e) {
+    process.stderr.write(red(`sign: ${e.message}\n`));
+    return 2;
+  }
+  // Re-validate so a malformed --derived-from can't slip a bad file out.
+  const recheck = require("../lib/validate").validateDoc(signed);
+  if (!recheck.ok) {
+    process.stdout.write(`${red("✗")} signed document no longer validates:\n`);
+    for (const err of recheck.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
+    return 1;
+  }
+  const target = out || file;
+  fs.writeFileSync(target, YAML.stringify(signed));
+  const lin = signed.provenance.derived_from
+    ? dim(` · derived from ${signed.provenance.derived_from.map((d) => d.id).join(", ")}`)
+    : "";
+  process.stdout.write(`${green("✓ SIGNED")} ${target} ${dim(`· by ${name || "anon"}`)}${lin}\n`);
+  return 0;
+}
+
+function cmdVerify(args) {
+  const json = args.includes("--json");
+  const file = args.find((a) => !a.startsWith("-"));
+  if (!file) {
+    process.stderr.write(red("verify: no persona file given\n\n") + USAGE);
+    return 2;
+  }
+  let persona;
+  try {
+    persona = loadPersona(file);
+  } catch (e) {
+    if (json) process.stdout.write(JSON.stringify({ ok: false, error: e.message }, null, 2) + "\n");
+    else process.stderr.write(red(`verify: ${e.message}\n`));
+    return 2;
+  }
+  const r = verifyPersona(persona);
+  if (json) {
+    process.stdout.write(JSON.stringify({ file, ...r }, null, 2) + "\n");
+    return r.signed && !r.ok ? 1 : 0;
+  }
+  if (!r.signed) {
+    process.stdout.write(`${dim("○ UNSIGNED")} ${file} ${dim("— no per-file provenance (valid, but unproven)")}\n`);
+    return 0;
+  }
+  if (!r.ok) {
+    process.stdout.write(`${red("✗ INVALID")} ${file} ${dim("— " + r.reason)}\n`);
+    return 1;
+  }
+  const who = (r.createdBy && (r.createdBy.name || r.createdBy.url)) || "anonymous key";
+  process.stdout.write(`${green("✓ VERIFIED")} ${file} ${dim(`· signed by ${who}`)}\n`);
+  if (r.derivedFrom && r.derivedFrom.length) {
+    for (const d of r.derivedFrom) {
+      process.stdout.write(`  ${dim("↳ " + (d.relation || "fork") + " of")} ${d.id}${d.source ? dim(` (${d.source})`) : ""}\n`);
+    }
+  }
+  return 0;
+}
+
 function cmdValidate(files) {
   if (files.length === 0) {
     process.stderr.write(red("validate: no persona file given\n\n") + USAGE);
@@ -277,6 +432,9 @@ async function main(argv) {
   if (cmd === "tier") return cmdTier(rest);
   if (cmd === "registry") return cmdRegistry(rest);
   if (cmd === "speak") return cmdSpeak(rest);
+  if (cmd === "keygen") return cmdKeygen(rest);
+  if (cmd === "sign") return cmdSign(rest);
+  if (cmd === "verify") return cmdVerify(rest);
 
   process.stderr.write(red(`unknown command: ${cmd}\n\n`) + USAGE);
   return 2;
