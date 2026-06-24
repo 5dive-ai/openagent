@@ -6,7 +6,7 @@
   "required": ["id", "name", "role", "face", "voice", "behavior"],
   "additionalProperties": false,
   "properties": {
-    "openagent": { "type": "string", "description": "spec version, e.g. \"0.1\"" },
+    "openagent": { "type": "string", "description": "spec version, e.g. \"0.2\". Optional pre-1.0 (validators warn when missing); moves into 'required' at spec 1.0. Always set it." },
     "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
     "name": { "type": "string" },
     "role": { "type": "string" },

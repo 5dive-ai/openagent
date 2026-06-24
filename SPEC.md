@@ -124,7 +124,13 @@ ext:
 
 ## Versioning
 
-Spec is semver. Persona files may declare `openagent: "0.2"` (or `"0.1"`) at top level (optional pre-1.0, required from 1.0). v0.2 is a backward-compatible superset of v0.1: every v0.1 file is valid under v0.2; the only additions are optional.
+Spec is semver. Persona files declare their version with a top-level `openagent: "0.2"` (or `"0.1"`). v0.2 is a backward-compatible superset of v0.1: every v0.1 file is valid under v0.2; the only additions are optional.
+
+**The `openagent:` field is optional pre-1.0 and REQUIRED from 1.0.** During the 0.x line a validator that finds the field missing (or set to a version it doesn't recognise) emits a non-fatal **warning** rather than failing — a migration runway so files authored today already carry the field when 1.0 makes it mandatory (schema-required). Always set it.
+
+**Conformance.** A tool may claim *"OpenAgent 0.1 compliant"* (or 0.2) by passing the portable [conformance suite](./conformance/) — a single `manifest.json` of valid/invalid cases with expected verdicts, runnable against any implementation in any language.
+
+**Changes to the spec** go through a lightweight [RFC process](./docs/RFC-PROCESS.md); every release is recorded in the [CHANGELOG](./CHANGELOG.md). The 1.0 cut is itself an RFC that freezes the field set and flips `openagent:` to required.
 
 ### Design rule — provenance
 

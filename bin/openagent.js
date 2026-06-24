@@ -21,6 +21,7 @@ const green = (s) => c("32", s);
 const red = (s) => c("31", s);
 const dim = (s) => c("2", s);
 const bold = (s) => c("1", s);
+const yellow = (s) => c("33", s);
 
 // 256-colour hex -> nearest ansi is overkill; just bold the tier word.
 function tierTag(name) {
@@ -433,11 +434,13 @@ function cmdValidate(files) {
       }
       process.stdout.write(`${green("✓ PASS")}  ${rel}${idNote}${tierNote}\n`);
       for (const line of quest) process.stdout.write(line + "\n");
+      for (const w of res.warnings || []) process.stdout.write(`        ${yellow("⚠")} ${w}\n`);
     } else {
       invalidCount++;
       if (res.errors.length === 1 && /^cannot read file:/.test(res.errors[0])) anyIoError = true;
       process.stdout.write(`${red("✗ FAIL")}  ${rel}\n`);
       for (const err of res.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
+      for (const w of res.warnings || []) process.stdout.write(`        ${yellow("⚠")} ${w}\n`);
     }
   }
   if (files.length > 1) {

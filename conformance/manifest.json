@@ -1,0 +1,225 @@
+{
+  "$comment": "OpenAgent conformance suite. A single, portable, language-agnostic set of cases any implementation can run its validator against to claim 'OpenAgent <spec> compliant'. Each case carries an inline persona document, the spec level it belongs to, and the expected verdict. See conformance/README.md for the compliance procedure.",
+  "suite": "openagent-conformance",
+  "spec_version": "0.2",
+  "spec_levels": ["0.1", "0.2"],
+  "cases": [
+    {
+      "name": "minimal-valid",
+      "spec": "0.1",
+      "expect": "valid",
+      "expect_warnings": ["openagent"],
+      "note": "smallest conforming persona: only required fields, written voice, no version field (warns pre-1.0).",
+      "doc": {
+        "id": "minimal",
+        "name": "Minimal",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a plain test face" },
+        "voice": { "written": { "rules": ["terse"], "sample": "hi." } },
+        "behavior": "a minimal conforming persona."
+      }
+    },
+    {
+      "name": "versioned-valid",
+      "spec": "0.1",
+      "expect": "valid",
+      "note": "declares its spec version, so it emits no version warning.",
+      "doc": {
+        "openagent": "0.1",
+        "id": "versioned",
+        "name": "Versioned",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a plain test face" },
+        "voice": { "audio": { "base": "Kore" } },
+        "behavior": "carries the openagent version field."
+      }
+    },
+    {
+      "name": "full-valid",
+      "spec": "0.1",
+      "expect": "valid",
+      "note": "exercises the optional v0.1 surface: both voice modes, posts_about, links.",
+      "doc": {
+        "openagent": "0.1",
+        "id": "full",
+        "name": "Full",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a plain face", "full": "./full.png", "sprite": "./sprite.png" },
+        "voice": {
+          "audio": { "base": "Charon", "style": "calm" },
+          "written": { "rules": ["terse", "dry"], "sample": "noted." }
+        },
+        "behavior": "a fully specified v0.1 persona.",
+        "posts_about": ["release", "incident"],
+        "links": { "avatar": "https://x.test/a.png", "profile": "https://x.test", "agent_card": "https://x.test/.well-known/agent.json" }
+      }
+    },
+    {
+      "name": "bad-id-pattern",
+      "spec": "0.1",
+      "expect": "invalid",
+      "expect_errors": ["id", "pattern"],
+      "doc": {
+        "id": "Bad ID!",
+        "name": "Bad",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a face" },
+        "voice": { "written": { "rules": ["x"], "sample": "y" } },
+        "behavior": "id must be a lowercase slug."
+      }
+    },
+    {
+      "name": "missing-required-behavior",
+      "spec": "0.1",
+      "expect": "invalid",
+      "expect_errors": ["missing required field 'behavior'"],
+      "doc": {
+        "id": "nobehavior",
+        "name": "NoBehavior",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a face" },
+        "voice": { "written": { "rules": ["x"], "sample": "y" } }
+      }
+    },
+    {
+      "name": "unknown-top-level-field",
+      "spec": "0.1",
+      "expect": "invalid",
+      "expect_errors": ["unknown field 'mood'"],
+      "note": "the core schema is closed (additionalProperties:false); unsanctioned top-level fields are rejected. Use ext for tool-specific data.",
+      "doc": {
+        "id": "extra",
+        "name": "Extra",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a face" },
+        "voice": { "written": { "rules": ["x"], "sample": "y" } },
+        "behavior": "has a stray field.",
+        "mood": "spicy"
+      }
+    },
+    {
+      "name": "voice-empty",
+      "spec": "0.1",
+      "expect": "invalid",
+      "expect_errors": ["voice"],
+      "note": "voice must carry audio and/or written (minProperties:1).",
+      "doc": {
+        "id": "novoice",
+        "name": "NoVoice",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a face" },
+        "voice": {},
+        "behavior": "voice has neither audio nor written."
+      }
+    },
+    {
+      "name": "face-missing-anchor",
+      "spec": "0.1",
+      "expect": "invalid",
+      "expect_errors": ["anchor"],
+      "doc": {
+        "id": "noanchor",
+        "name": "NoAnchor",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png" },
+        "voice": { "written": { "rules": ["x"], "sample": "y" } },
+        "behavior": "face is missing its anchor."
+      }
+    },
+    {
+      "name": "audio-missing-base",
+      "spec": "0.1",
+      "expect": "invalid",
+      "expect_errors": ["base"],
+      "doc": {
+        "id": "nobase",
+        "name": "NoBase",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a face" },
+        "voice": { "audio": { "style": "calm" } },
+        "behavior": "audio is missing its base voice."
+      }
+    },
+    {
+      "name": "unknown-spec-version-warns",
+      "spec": "0.1",
+      "expect": "valid",
+      "expect_warnings": ["unrecognised spec version"],
+      "note": "a future/unknown version validates against the latest known schema and warns; it does not fail.",
+      "doc": {
+        "openagent": "9.9",
+        "id": "future",
+        "name": "Future",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a face" },
+        "voice": { "written": { "rules": ["x"], "sample": "y" } },
+        "behavior": "declares a version this tool does not know."
+      }
+    },
+    {
+      "name": "provenance-lineage-valid",
+      "spec": "0.2",
+      "expect": "valid",
+      "note": "v0.2: optional provenance with remix lineage.",
+      "doc": {
+        "openagent": "0.2",
+        "id": "remix",
+        "name": "Remix",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a face" },
+        "voice": { "written": { "rules": ["x"], "sample": "y" } },
+        "behavior": "derived from another persona.",
+        "provenance": { "derived_from": [{ "id": "minimal", "relation": "remix" }] }
+      }
+    },
+    {
+      "name": "provenance-bad-relation",
+      "spec": "0.2",
+      "expect": "invalid",
+      "expect_errors": ["relation"],
+      "doc": {
+        "openagent": "0.2",
+        "id": "badremix",
+        "name": "BadRemix",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a face" },
+        "voice": { "written": { "rules": ["x"], "sample": "y" } },
+        "behavior": "lineage relation is not in the enum.",
+        "provenance": { "derived_from": [{ "id": "minimal", "relation": "stolen-from" }] }
+      }
+    },
+    {
+      "name": "ext-namespace-valid",
+      "spec": "0.2",
+      "expect": "valid",
+      "note": "v0.2: sanctioned ext escape hatch, keyed by tool namespace.",
+      "doc": {
+        "openagent": "0.2",
+        "id": "extended",
+        "name": "Extended",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a face" },
+        "voice": { "written": { "rules": ["x"], "sample": "y" } },
+        "behavior": "carries tool-specific data under ext.",
+        "ext": { "acme-studio": { "render_preset": "cinematic-4k", "fps": 24 } }
+      }
+    },
+    {
+      "name": "ext-unnamespaced-scalar",
+      "spec": "0.2",
+      "expect": "invalid",
+      "expect_errors": ["ext"],
+      "note": "ext values must be namespaced objects; a bare scalar is rejected.",
+      "doc": {
+        "openagent": "0.2",
+        "id": "badext",
+        "name": "BadExt",
+        "role": "Test Persona",
+        "face": { "ref": "./face.png", "anchor": "a face" },
+        "voice": { "written": { "rules": ["x"], "sample": "y" } },
+        "behavior": "ext has an un-namespaced scalar.",
+        "ext": { "stray": "nope" }
+      }
+    }
+  ]
+}

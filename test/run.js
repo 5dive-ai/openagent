@@ -2,7 +2,8 @@
 
 // Tiny dependency-free test runner.
 const path = require("path");
-const { validateFile, validate } = require("../lib/validate");
+const { validateFile, validate, versionWarnings, SPEC_VERSION, KNOWN_VERSIONS } = require("../lib/validate");
+const { runConformance } = require("./conformance");
 const { buildSvg, resolveFace } = require("../lib/card");
 const { computeTier, computeBadges, nextRung } = require("../lib/tier");
 const registry = require("../lib/registry");
@@ -202,6 +203,20 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("links.agent_card does not change computed tier",
     computeTier(withCard, { faceResolved: true }).tier === computeTier(arbLinks, { faceResolved: true }).tier);
 
+  // 5c. Version field — top-level `openagent:` is optional pre-1.0 (warn),
+  // REQUIRED from 1.0 (DIVE-655). Warnings never fail validation.
+  const noVer = JSON.parse(JSON.stringify(marcusDoc));
+  delete noVer.openagent;
+  const noVerRes = validate(noVer);
+  check("missing version still validates (optional pre-1.0)", noVerRes.ok === true);
+  check("missing version emits a warning", noVerRes.warnings.some((w) => /required from spec 1\.0/i.test(w)));
+  const verRes = validate({ ...noVer, openagent: SPEC_VERSION });
+  check("declared known version → no version warning", verRes.ok === true && verRes.warnings.length === 0);
+  const futureRes = validate({ ...noVer, openagent: "9.9" });
+  check("unknown version validates but warns", futureRes.ok === true && futureRes.warnings.some((w) => /unrecognised spec version/.test(w)));
+  check("KNOWN_VERSIONS includes the current SPEC_VERSION", KNOWN_VERSIONS.includes(SPEC_VERSION));
+  check("versionWarnings is a pure helper (empty for a versioned doc)", versionWarnings({ openagent: "0.1", id: "x" }).length === 0);
+
   // 6. Signed registry — ship + verify.
   const bundled = registry.loadBundled();
   check("bundled manifest verifies against shipped key", bundled.verified === true);
@@ -284,6 +299,10 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   const opsBase = JSON.parse(JSON.stringify(opsDoc));
   delete opsBase.provenance;
   check("provenance does not affect computed tier", computeTier(opsDoc, { faceResolved: true }).tier === computeTier(opsBase, { faceResolved: true }).tier);
+
+  // 8. Conformance suite — run the portable manifest against this impl.
+  console.log("\n-- conformance suite --");
+  failures += runConformance();
 
   if (failures) {
     console.log(`\n${failures} test(s) failed`);
