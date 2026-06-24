@@ -2,14 +2,7 @@
   "registryFormat": 1,
   "name": "5dive character-packs — official Mythical registry",
   "source": "https://raw.githubusercontent.com/5dive-ai/character-packs/main/index.json",
-  "snapshotOf": "2026-06-20",
-  "signedAt": "2026-06-23",
-  "slugs": [
-    "olivia",
-    "marcus",
-    "theo",
-    "dario",
-    "dude",
-    "lilbro"
-  ]
+  "snapshotOf": "2026-06-24",
+  "signedAt": "2026-06-24",
+  "slugs": []
 }
