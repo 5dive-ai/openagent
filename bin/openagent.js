@@ -4,7 +4,7 @@
 const path = require("path");
 const { validateFile } = require("../lib/validate");
 const { renderCard, resolveFace, fetchRegistryIds } = require("../lib/card");
-const { computeTier, TIER_STYLE } = require("../lib/tier");
+const { computeTier, computeBadges, nextRung, rungNeeds, TIER_STYLE } = require("../lib/tier");
 const { registryStatus } = require("../lib/registry");
 const { speak } = require("../lib/speak");
 const { generateKeypair, signPersona, verifyPersona } = require("../lib/provenance");
@@ -27,6 +27,25 @@ function tierTag(name) {
   return bold(name.toUpperCase());
 }
 
+// Offline, synchronous face-resolution check for `validate` — never touches
+// the network. A URL ref is taken at face value (the authoritative fetch is
+// `tier`/`card`); a local ref must exist on disk. Keeps validate fast enough
+// to run over a whole pack in CI.
+function faceResolvesOffline(ref, baseDir) {
+  const r = typeof ref === "string" ? ref.trim() : "";
+  if (!r) return false;
+  if (/^https?:\/\//i.test(r)) return true;
+  // Mirror resolveFace()'s local candidates: file-relative, then cwd-relative.
+  const candidates = path.isAbsolute(r)
+    ? [r]
+    : [path.resolve(baseDir, r), path.resolve(process.cwd(), r)];
+  try {
+    return candidates.some((abs) => fs.existsSync(abs));
+  } catch (_) {
+    return false;
+  }
+}
+
 const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (v0.1)
 
 ${bold("Usage")}
@@ -44,7 +63,10 @@ ${bold("Usage")}
 
 ${bold("validate")}
   Checks a *.persona.yaml (or .json) file against the OpenAgent v0.1
-  JSON Schema. Prints a clear pass/fail with readable errors.
+  JSON Schema. Prints a clear pass/fail with readable errors. On a pass it
+  also shows the (offline) rarity tier, the exact "next rung" to add to climb
+  it, and any collectible badges earned (voice-clone, sprite-sheet, full-body,
+  face-recipe, signed, remixed) — badges are orthogonal to the tier ladder.
   Exit code 0 = all valid, 1 = one or more invalid, 2 = usage/IO error.
 
 ${bold("card")}
@@ -173,11 +195,14 @@ async function cmdTier(args) {
   if (checkRegistry) inRegistry = (await fetchRegistryIds()).has(persona.id);
   // We only reach here after validateFile passed above, so Common is satisfied.
   const t = computeTier(persona, { faceResolved: face.resolved, inRegistry, schemaValid: true });
+  const badges = computeBadges(persona);
 
   if (json) {
     process.stdout.write(
       JSON.stringify(
-        { ok: true, id: persona.id, tier: t.tier, level: t.level, completeness: t.completeness, faceResolved: face.resolved, inRegistry, gates: t.gates },
+        { ok: true, id: persona.id, tier: t.tier, level: t.level, completeness: t.completeness,
+          faceResolved: face.resolved, inRegistry, gates: t.gates,
+          badges: badges.map((b) => b.key) },
         null, 2
       ) + "\n"
     );
@@ -189,13 +214,7 @@ async function cmdTier(args) {
   // unmet rung is the blocker; everything above it is locked.
   const order = ["common", "rare", "epic", "legendary", "mythical"];
   const labels = ["Common", "Rare", "Epic", "Legendary", "Mythical"];
-  const need = {
-    common: "id, name, role, voice.audio.base, written.sample",
-    rare: face.resolved ? "non-stub written.sample" : "face.ref must resolve to a real image",
-    epic: "named voice base (not 'unset') + behavior",
-    legendary: "voice.style + face anchor & sprite + links + posts_about",
-    mythical: "listed in the character-packs registry",
-  };
+  const need = rungNeeds(face.resolved);
   for (let i = 0; i < order.length; i++) {
     if (i < t.level) {
       process.stdout.write(`  ${green("✓")} ${labels[i]}\n`);
@@ -205,7 +224,18 @@ async function cmdTier(args) {
       process.stdout.write(`  ${dim("🔒 " + labels[i])}\n`);
     }
   }
+  // Badges are orthogonal to the ladder — shown as a separate collectible row.
+  writeBadgeLines(badges);
   return 0;
+}
+
+// Shared badge renderer: a "🎖 badges:" summary line listing earned keys.
+function writeBadgeLines(badges) {
+  if (badges.length) {
+    process.stdout.write(`  ${dim("🎖  badges:")} ${badges.map((b) => b.key).join(", ")}\n`);
+  } else {
+    process.stdout.write(`  ${dim("🎖  badges: none yet")}\n`);
+  }
 }
 
 async function cmdRegistry(args) {
@@ -379,7 +409,30 @@ function cmdValidate(files) {
     const res = validateFile(file);
     if (res.ok) {
       const idNote = res.id ? dim(` (id: ${res.id})`) : "";
-      process.stdout.write(`${green("✓ PASS")}  ${rel}${idNote}\n`);
+      // Offline tier estimate + the exact "next rung" to chase, so validate
+      // doubles as a completeness quest, not just a pass/fail gate. Registry
+      // (Mythical) is never probed here — that's `tier`'s networked job.
+      let tierNote = "", quest = [];
+      try {
+        const persona = loadPersona(file);
+        const faceResolved = faceResolvesOffline(persona.face?.ref, path.dirname(path.resolve(file)));
+        const t = computeTier(persona, { faceResolved, schemaValid: true });
+        const badges = computeBadges(persona);
+        tierNote = ` — ${tierTag(t.tier)} ${dim(`· ${t.completeness}% complete`)}`;
+        const nr = nextRung(t, faceResolved);
+        if (nr) quest.push(`        ${dim("↑ next:")} ${nr.label} ${dim(`— add ${nr.need}`)}`);
+        else quest.push(`        ${dim("★ top of the ladder")}`);
+        quest.push(
+          badges.length
+            ? `        ${dim("🎖  badges:")} ${badges.map((b) => b.key).join(", ")}`
+            : `        ${dim("🎖  badges: none yet")}`
+        );
+      } catch (_) {
+        // A file that validates but can't be re-parsed is impossible in
+        // practice; degrade silently to the plain PASS line.
+      }
+      process.stdout.write(`${green("✓ PASS")}  ${rel}${idNote}${tierNote}\n`);
+      for (const line of quest) process.stdout.write(line + "\n");
     } else {
       invalidCount++;
       if (res.errors.length === 1 && /^cannot read file:/.test(res.errors[0])) anyIoError = true;

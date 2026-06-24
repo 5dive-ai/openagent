@@ -154,6 +154,36 @@ RARE · 75% complete  marcus.persona.yaml
 
 Add `--json` for scripting/CI.
 
+`validate` now shows the same tier + next-rung hint inline (offline — it never
+probes the registry), so a single pass tells you whether the file is legal
+*and* exactly what to add to climb:
+
+```
+npx github:5dive-ai/openagent validate marcus.persona.yaml
+✓ PASS  marcus.persona.yaml (id: marcus) — RARE · 75% complete
+        ↑ next: Epic — add a named voice base (voice.audio.base, not 'unset') + behavior
+        🎖  badges: sprite-sheet, face-recipe
+```
+
+### Badges — orthogonal to tier
+
+The tier ladder hard-stops at the first unmet gate, so a genuinely valuable
+asset can stay hidden behind an earlier rung (a fully cloned voice on a persona
+still stuck at Common for a stub sample). **Badges** are collectibles you earn
+*independently* of tier — each one a specific production asset:
+
+| Badge | Earns it |
+|-------|----------|
+| `voice-clone` | a reference clip the voice is cloned from (`voice.audio.ref`) |
+| `sprite-sheet` | an expression/pose sprite sheet (`face.sprite`) |
+| `full-body` | a full-body reference render (`face.full`) |
+| `face-recipe` | a regeneration recipe — model + prompt + seed (`face.recipe`) |
+| `signed` | an ed25519 authorship signature (`provenance.signature`) |
+| `remixed` | declared remix lineage to a parent (`provenance.derived_from`) |
+
+Both `validate` and `tier` list earned badges; `tier --json` includes a
+`badges` array. Badges never change the computed tier.
+
 ## For agents — self-author with the skill
 
 If you're an AI agent, you don't have to drive the CLI by hand. The

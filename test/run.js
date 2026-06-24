@@ -4,7 +4,7 @@
 const path = require("path");
 const { validateFile, validate } = require("../lib/validate");
 const { buildSvg, resolveFace } = require("../lib/card");
-const { computeTier } = require("../lib/tier");
+const { computeTier, computeBadges, nextRung } = require("../lib/tier");
 const registry = require("../lib/registry");
 const provenance = require("../lib/provenance");
 const crypto = require("crypto");
@@ -95,6 +95,42 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("validate(doc) flags a schema-invalid persona", validate(docBad).ok === false);
   const flowed = computeTier(docBad, { faceResolved: true, schemaValid: validate(docBad).ok });
   check("validate(doc) verdict flows to Ungraded", flowed.level === 0);
+
+  // 5b. Collectible badges — orthogonal to the rarity ladder (DIVE-654).
+  const opsDocB = load(path.join(examples, "marcus-ops.persona.yaml"));
+  const marcusBadges = computeBadges(marcusDoc).map((b) => b.key);
+  check("marcus earns sprite-sheet badge (has face.sprite)", marcusBadges.includes("sprite-sheet"));
+  check("marcus earns face-recipe badge (has face.recipe)", marcusBadges.includes("face-recipe"));
+  const opsBadges = computeBadges(opsDocB).map((b) => b.key);
+  check("marcus-ops earns signed + remixed badges", opsBadges.includes("signed") && opsBadges.includes("remixed"));
+
+  // A voice with a reference clip earns voice-clone; absent → not.
+  const cloned = JSON.parse(JSON.stringify(marcusDoc));
+  cloned.voice.audio.ref = "./voices/marcus.wav";
+  check("voice.audio.ref earns voice-clone badge", computeBadges(cloned).some((b) => b.key === "voice-clone"));
+  const noClone = JSON.parse(JSON.stringify(marcusDoc));
+  delete noClone.voice.audio.ref;
+  check("no voice.audio.ref → no voice-clone badge", !computeBadges(noClone).some((b) => b.key === "voice-clone"));
+
+  // Orthogonality: a badge-bearing asset that isn't a tier gate changes no tier.
+  const fullBody = JSON.parse(JSON.stringify(marcusDoc));
+  fullBody.face.full = "./faces/marcus-full.png";
+  check("full-body badge earned", computeBadges(fullBody).some((b) => b.key === "full-body"));
+  check("adding full-body asset does not change tier",
+    computeTier(fullBody, { faceResolved: true }).tier === computeTier(marcusDoc, { faceResolved: true }).tier);
+
+  // signed badge honours an authoritative ctx.signatureValid verdict over presence.
+  check("signed badge respects ctx.signatureValid=false",
+    !computeBadges(opsDocB, { signatureValid: false }).some((b) => b.key === "signed"));
+
+  // Next-rung hints: the single rung to chase, or null at the top.
+  const nrMarcus = nextRung(computeTier(marcusDoc, { faceResolved: true }), true);
+  check("next rung above Rare is Epic", nrMarcus && nrMarcus.label === "Epic" && /voice base/.test(nrMarcus.need));
+  const nrUnresolved = nextRung(computeTier(marcusDoc, { faceResolved: false }), false);
+  check("unresolved-face Rare hint points at face.ref", nrUnresolved.label === "Rare" && /face\.ref/.test(nrUnresolved.need));
+  const nrLil = nextRung(computeTier(lilDoc, { faceResolved: true }), true);
+  check("next rung above Legendary is Mythical", nrLil && nrLil.label === "Mythical");
+  check("Mythical has no next rung", nextRung(lilMyth, true) === null);
 
   // face.recipe — optional regenerable likeness, additive + back-compat (DIVE-649).
   const withRecipe = JSON.parse(JSON.stringify(marcusDoc));
