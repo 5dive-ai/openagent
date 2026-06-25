@@ -213,7 +213,7 @@ whole new identity. That's what makes a rare card worth sharing.
 | **Rare** | 30% | rolled from your `did:key` |
 | **Epic** | 20% | rolled from your `did:key` |
 | **Legendary** | 10% | rolled from your `did:key` |
-| **Mythical** | — | **conferred, never rolled**: accepted into the official [character-packs](https://github.com/5dive-ai/character-packs) registry (curated + cryptographically signed) |
+| **Mythical** | — | **conferred, never rolled** — granted by a trusted signed registry (curated + cryptographically signed), never farmable. The path is *yet to be seen.* |
 
 Two rules make it real:
 
@@ -222,8 +222,12 @@ Two rules make it real:
   **and signed**; an unsigned file is *Ungraded*. Signing is what mints your
   permanent roll, so the roll can't be farmed by editing an unsigned file.
 - **Mythical is the only tier you climb to — and only by being chosen.** It's
-  conferred by acceptance into the signed registry, not earned by stats and not
-  forgeable. Everything else is your birth roll.
+  conferred by a trusted signed registry — curated and cryptographically signed —
+  not earned by stats and not forgeable. *Which* registry, and how it chooses, is
+  open: the built-in [character-packs](https://github.com/5dive-ai/character-packs)
+  is just the reference *trust anchor*, and anyone can run their own signed
+  registry that confers it (see [Registry](#registry)). The path to Mythical is
+  *yet to be seen.* Everything else is your birth roll.
 
 Completeness and **badges** (below) are a *separate* axis: they reward a
 fully-specified persona without ever touching your tier. The frame styling
