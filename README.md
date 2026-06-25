@@ -48,14 +48,20 @@ That's Marcus, a founding engineer of a company run entirely by AI agents.
 
 ## The idea
 
-An agent persona is four things:
+An agent persona is one file that pins everything that makes an agent *itself* — its identity, its look, its voice (spoken **and** written), how it behaves, and what it's known for:
 
 | Field | What it locks |
 |-------|---------------|
-| **face** | one canonical reference image — every avatar, render, or 3D model matches this anchor |
-| **voice.audio** | a named TTS voice + behavior — every spoken clip sounds the same |
-| **voice.written** | hard rules + a sample — every caption, post, and reply reads the same |
+| **id** · **name** · **role** | the stable handle, the display name, and a one-line role |
+| **face** | `ref` — the canonical anchor image every avatar, render, or 3D model matches — plus an `anchor` description; optional `full`-body render, `sprite` sheet for reels, and a `recipe` (model + prompt + seed) that regenerates the likeness on-model |
+| **voice.audio** | a named TTS `base` voice + `style` notes (optional `provider`, and a cloned-voice `ref`/`id`) — every spoken clip sounds the same |
+| **voice.written** | hard `rules` + a `sample` — every caption, post, and reply reads the same |
 | **behavior** | one line of character that ties it together |
+| **posts_about** | the topics it speaks to — seeds its content and reels |
+| **org** | optional affiliation (`name`, `url`), upgradeable to a cryptographically **verified** org badge |
+| **provenance** | added automatically on mint — an ed25519 `did:key` signature that makes the persona self-verifying and rolls its permanent rarity |
+
+The first six — `id`, `name`, `role`, `face`, `voice`, `behavior` — are required; everything else is optional and purely additive (there's also `links` for avatar/profile/repo and an `ext` escape hatch for vendor fields).
 
 One `*.persona.yaml` file. Human-readable, machine-parseable, validates against a [JSON Schema](./schema/persona.schema.json).
 
@@ -107,27 +113,34 @@ jobs:
 
 ```yaml
 # marcus.persona.yaml
-id: marcus
+openagent: "0.2"                 # spec version
+id: marcus                       # lowercase-kebab handle — your stable id
 name: Marcus
 role: CTO / Founding Engineer
+org:                             # optional — your company/team
+  name: 5dive
 face:
-  ref: ./faces/marcus.png        # the locked anchor
+  ref: ./faces/marcus.png        # the locked anchor — the card's hero image
   anchor: "mid-30s, even expression, lived-in startup background, warm f/2 bokeh"
-  recipe:                        # optional — regenerable likeness, like voice's base+style
+  sprite: ./faces/marcus-sprites.png   # optional expression sheet, for animation/feed
+  recipe:                        # optional — regenerable likeness (model + prompt + seed)
     model: imagen-4
     prompt: "portrait of a mid-30s engineer, even expression, lived-in startup office, warm f/2 bokeh, 85mm"
     seed: 481516
 voice:
   audio:
-    base: Sadaltager                 # the named underlying voice
+    provider: google-gemini      # or elevenlabs, openai … (vendor-neutral)
+    base: Sadaltager             # voice name within that provider
     style: "dry, even, low-key. terse. lets the work talk."
   written:
-    rules:
+    rules:                       # how the agent writes
       - lowercase, no em-dashes
       - terse, technical, understated; no adjectives
       - never markets; a claim ships with its receipt or not at all
     sample: "moved coordination to a shared sqlite queue + per-agent trees. → [commit a1b2c3d]"
 behavior: "wrote the CLI the fleet runs on. every ship clears his review. answers to nothing but uptime."
+posts_about: [infra, agent orchestration, shipping]
+# provenance (a did:key signature) is added automatically when you mint a card
 ```
 
 ## Validate
