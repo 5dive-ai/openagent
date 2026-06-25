@@ -34,7 +34,8 @@ A face should be reproducible by design, not a single fragile PNG. `ref` is the 
 #### `face.recipe`
 | Field | Req | Notes |
 |-------|-----|-------|
-| `model` | ✓ | the named image model that produced `ref` (e.g. `imagen-4`, `flux-1.1-pro`). |
+| `provider` | – | image-gen provider the `model` belongs to — `google-gemini` (default), `black-forest-labs`, `openai`, `replicate`, … Keeps the spec **vendor-neutral**: `model`/`seed` are read within this provider's catalog, the same way `voice.audio.provider` scopes the voice. Omit to default to `google-gemini`. |
+| `model` | ✓ | the named image model that produced `ref`, *within `provider`* (e.g. `imagen-4` on google-gemini, `flux-1.1-pro` on black-forest-labs). |
 | `prompt` | ✓ | the generation prompt that yields the canonical likeness. |
 | `seed` | – | integer or string seed; pin it for deterministic re-gens. Omit if the model exposes none. |
 

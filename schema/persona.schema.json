@@ -50,7 +50,8 @@
           "required": ["model", "prompt"],
           "additionalProperties": false,
           "properties": {
-            "model": { "type": "string", "description": "the named image model that produced ref (e.g. \"imagen-4\", \"flux-1.1-pro\")." },
+            "provider": { "type": "string", "description": "image-gen provider the `model` belongs to, e.g. \"google-gemini\" (default), \"black-forest-labs\", \"openai\", \"replicate\". Keeps the spec vendor-neutral: `model`/`seed` are interpreted within this provider's catalog. Omit to default to google-gemini." },
+            "model": { "type": "string", "description": "the named image model that produced ref, within `provider` (e.g. \"imagen-4\" on google-gemini, \"flux-1.1-pro\" on black-forest-labs)." },
             "prompt": { "type": "string", "description": "the generation prompt that yields the canonical likeness." },
             "seed": { "type": ["integer", "string"], "description": "the seed used; pin it for deterministic re-gens (omit if the model exposes none)." }
           }

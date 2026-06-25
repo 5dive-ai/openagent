@@ -78,7 +78,7 @@ ${bold("Usage")}
   openagent org init   --url <org> --name <Org> --key <orgpriv.key> [--key-id <id>] [-o openagent.json]
   openagent org attest <persona-file> --key <orgpriv.key> (--url <org> | --did <did:web>) [--key-id <id>] [-o <out>]
   openagent org verify <persona-file> [--json]
-  openagent flow <persona-file> "<scene>" [--json]
+  openagent flow <persona-file> "<scene>" [--engine <name>] [--json]
   openagent --help
   openagent --version
 
@@ -1008,11 +1008,17 @@ async function cmdSpeak(args) {
 }
 
 async function cmdFlow(args) {
-  const json = args.includes("--json");
-  const pos = args.filter((a) => !a.startsWith("-"));
+  let engine = null;
+  const pos = [], flags = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--engine") engine = args[++i];
+    else if (args[i].startsWith("-")) flags.push(args[i]);
+    else pos.push(args[i]);
+  }
+  const json = flags.includes("--json");
   const [file, scene] = pos;
   if (!file || !scene) {
-    process.stderr.write(red('flow: usage: openagent flow <persona-file> "<scene>" [--json]\n\n') + USAGE);
+    process.stderr.write(red('flow: usage: openagent flow <persona-file> "<scene>" [--engine <name>] [--json]\n\n') + USAGE);
     return 2;
   }
   const v = validateFile(file);
@@ -1021,17 +1027,18 @@ async function cmdFlow(args) {
     for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
     return 1;
   }
-  const r = flow(file, scene);
+  const r = flow(file, scene, { engine });
   if (r.error) { process.stderr.write(red(`flow: ${r.error}\n`)); return 1; }
   if (json) { process.stdout.write(JSON.stringify(r, null, 2) + "\n"); return 0; }
-  process.stdout.write(`${green("✓ FLOW")}  ${r.name}${r.role ? dim(" — " + r.role) : ""} ${dim("· paste into Flow/Veo")}\n\n`);
+  const engineTag = r.engine ? r.engine : "engine-neutral";
+  process.stdout.write(`${green("✓ FLOW")}  ${r.name}${r.role ? dim(" — " + r.role) : ""} ${dim("· paste into " + (r.engine || "Flow/Veo/Runway/Kling/…"))}\n\n`);
   if (r.refs.length) {
-    process.stdout.write(`${bold("character reference")}\n`);
+    process.stdout.write(`${bold("character reference")}${r.provider ? dim(" (" + r.provider + ")") : ""}\n`);
     for (const ref of r.refs) process.stdout.write(`  ${ref}\n`);
     process.stdout.write("\n");
   }
   process.stdout.write(`${bold("prompt")}\n${r.prompt}\n`);
-  if (r.model || r.seed != null) process.stdout.write(`\n${dim(`model: ${r.model || "-"}   seed: ${r.seed != null ? r.seed : "-"}`)}\n`);
+  process.stdout.write(`\n${dim(`engine: ${engineTag}   model: ${r.model || "-"}   seed: ${r.seed != null ? r.seed : "-"}`)}\n`);
   return 0;
 }
 

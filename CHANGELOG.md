@@ -13,6 +13,20 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.28.0] — vendor-neutral image + video providers (DIVE-690)
+
+- **Spec (v0.2, additive) — `face.recipe.provider`.** The image-gen recipe now
+  carries an optional `provider` (default `google-gemini`) naming the vendor whose
+  catalog `model`/`seed` belong to — `black-forest-labs`, `openai`, `replicate`, …
+  This mirrors the shipped `voice.audio.provider`, so the spec is no longer
+  implicitly single-vendor for image generation. Back-compat: omit it and it
+  defaults to google-gemini; existing personas validate unchanged.
+- **CLI — `flow --engine <name>`.** `openagent flow` accepts an optional target
+  video engine (e.g. `veo-3`, `runway-gen4`, `kling`); default stays
+  engine-neutral (the prompt + reference image drop into any engine). `flow`
+  output now emits `provider` (image vendor of the reference) and `engine`
+  (target video engine) so downstream tooling can route the prompt.
+
 ## [Unreleased]
 
 - **Docs — release process (DIVE-696).** Added [`docs/RELEASING.md`](docs/RELEASING.md):
