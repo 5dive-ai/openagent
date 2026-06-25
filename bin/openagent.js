@@ -248,6 +248,9 @@ async function cmdCard(args) {
     for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
     return 1;
   }
+  // Non-fatal advisories (placeholder org, missing version) — the card prints
+  // org.name verbatim, so flag a left-in placeholder before it ships on the card.
+  for (const w of v.warnings || []) process.stdout.write(`${yellow("⚠")} ${w}\n`);
 
   // Mint an identity so the card shows a real ROLLED rarity instead of Ungraded
   // (rarity is seeded from the did:key, which only exists once signed). Only on

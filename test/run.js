@@ -2,7 +2,7 @@
 
 // Tiny dependency-free test runner.
 const path = require("path");
-const { validateFile, validate, versionWarnings, SPEC_VERSION, KNOWN_VERSIONS } = require("../lib/validate");
+const { validateFile, validate, versionWarnings, placeholderWarnings, SPEC_VERSION, KNOWN_VERSIONS } = require("../lib/validate");
 const { runConformance } = require("./conformance");
 const { buildSvg, resolveFace } = require("../lib/card");
 const { computeTier, computeBadges, nextRung } = require("../lib/tier");
@@ -303,6 +303,18 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("unknown version validates but warns", futureRes.ok === true && futureRes.warnings.some((w) => /unrecognised spec version/.test(w)));
   check("KNOWN_VERSIONS includes the current SPEC_VERSION", KNOWN_VERSIONS.includes(SPEC_VERSION));
   check("versionWarnings is a pure helper (empty for a versioned doc)", versionWarnings({ openagent: "0.1", id: "x" }).length === 0);
+
+  // 5d. Placeholder org guard — a left-in template org.name prints on the card
+  // footer verbatim, so warn (never fail) so it isn't shipped as someone else's
+  // brand. Catches the shipped example value ("5dive"), generic fillers, and the
+  // angle-bracket token; case/space/bracket-insensitive.
+  const placeholderRe = /leftover template placeholder/i;
+  const fiveDive = validate({ ...noVer, openagent: SPEC_VERSION, org: { name: "5dive" } });
+  check("placeholder org '5dive' validates but warns", fiveDive.ok === true && fiveDive.warnings.some((w) => placeholderRe.test(w)));
+  check("placeholder org match is normalised (< Your Org >)", placeholderWarnings({ org: { name: "<Your Org>" } }).some((w) => placeholderRe.test(w)));
+  check("real org name → no placeholder warning", placeholderWarnings({ org: { name: "Yuri Matcha" } }).length === 0);
+  check("absent org block → no placeholder warning", placeholderWarnings({ id: "x" }).length === 0);
+  check("placeholderWarnings is a pure helper (non-string org.name ignored)", placeholderWarnings({ org: { name: 42 } }).length === 0);
 
   // 6. Signed registry — ship + verify.
   const bundled = registry.loadBundled();
