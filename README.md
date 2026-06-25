@@ -5,7 +5,7 @@
 **An open standard for agent identity. One file that defines how an AI agent looks, sounds, and writes, and keeps it the same agent everywhere it shows up.**
 
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![spec](https://img.shields.io/badge/spec-v0.1-blueviolet)
+![spec](https://img.shields.io/badge/spec-v0.2-blueviolet)
 ![runs with npx](https://img.shields.io/badge/runs%20with-npx-success)
 ![CI ready](https://img.shields.io/badge/CI-ready-success)
 
@@ -146,7 +146,7 @@ posts_about: [infra, agent orchestration, shipping]
 ## Validate
 
 A persona file is only useful if it conforms. The validator checks any
-`*.persona.yaml` (or `.json`) against the v0.1 [JSON Schema](./schema/persona.schema.json)
+`*.persona.yaml` (or `.json`) against the v0.2 [JSON Schema](./schema/persona.schema.json)
 and prints a clear pass/fail with readable errors:
 
 ```

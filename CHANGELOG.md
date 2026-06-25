@@ -13,6 +13,17 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.30.0] — faceless-card fix: sniff the real image format (DIVE-704)
+
+- **Fix — `resolveFace` now trusts magic bytes, not the file extension.** A
+  portrait fetched from pollinations/FLUX comes back as JPEG bytes under a
+  `.png` name; the old resolver labeled the embedded data URI `image/png`, so
+  resvg silently failed to decode it and rendered a **faceless** card (just the
+  holo starfield). The resolver now sniffs the leading bytes (PNG/JPEG/GIF/WEBP)
+  and labels the data URI with the true mime — for both local files and remote
+  URLs — falling back to the extension/Content-Type only when the bytes are
+  unrecognised. No more manual `ffmpeg` re-encode to get a face to embed.
+
 ## [0.29.0] — `doctor` end-to-end pre-flight (DIVE-691)
 
 - **CLI — `openagent doctor <persona>`.** One command that rolls every other
