@@ -241,7 +241,7 @@ climb to:
 npx github:5dive-ai/openagent tier marcus-ops.persona.yaml
 RARE · 63% complete  marcus-ops.persona.yaml
   ✓ Rare — rolled from your did:key. Permanent; it never changes.
-  ↑ only climb: Mythical — get accepted into the curated character-packs registry (raise completeness + collect badges meanwhile)
+  ↑ only climb: Mythical — get conferred Mythical by a trusted signed registry — the path is yet to be seen (raise completeness + collect badges meanwhile)
   🎖  badges: signed, remixed
 ```
 
@@ -254,7 +254,7 @@ it stands:
 ```
 npx github:5dive-ai/openagent validate marcus-ops.persona.yaml
 ✓ PASS  marcus-ops.persona.yaml (id: marcus-ops) — RARE · 63% complete
-        ↑ next: Mythical — get accepted into the curated character-packs registry (raise completeness + collect badges meanwhile)
+        ↑ next: Mythical — get conferred Mythical by a trusted signed registry — the path is yet to be seen (raise completeness + collect badges meanwhile)
         🎖  badges: signed, remixed
 ```
 
