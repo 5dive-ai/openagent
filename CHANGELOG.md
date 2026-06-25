@@ -15,6 +15,13 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+- **Docs — release process (DIVE-696).** Added [`docs/RELEASING.md`](docs/RELEASING.md):
+  every release must create an immutable `vX.Y.Z` tag and bump the matching pin
+  in the `5dive-ai/skills` `openagent` skill. The skill runs the CLI via
+  `npx github:5dive-ai/openagent#vX.Y.Z`; `npx` caches github clones per ref, so
+  the version tag is what guarantees fresh agents get the current renderer
+  (npm lagged at 0.22.0 while `main` was 0.27.0). Tags v0.25.0–v0.27.0 backfilled.
+
 ## [0.27.0] — 2026-06-25 · CLI · federated signed registries
 
 **DIVE-689 — anyone can run their own signed Mythical registry.** Mythical was
