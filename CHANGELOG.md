@@ -15,6 +15,17 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-06-25 · spec 0.2 + CLI
+### Added — vendor-neutral voice provider
+- Optional `voice.audio.provider` (default `google-gemini`) so a persona can name
+  a voice from any TTS — `elevenlabs`, `openai`, `playht`, … `base`/`id` are read
+  within that provider's catalog. Keeps the spec vendor-neutral. `speak` flags a
+  non-default provider (it synthesizes via Gemini today). Schema + SPEC updated.
+### Changed — CLI echoes the friendly id
+- `card` (and the auto-mint message) now print the friendly `handle·fingerprint`
+  id, matching the card footer and `openagent id` — so the id you share is shown
+  right when you render/mint.
+
 ## [0.23.0] — 2026-06-25 · CLI
 ### Changed — card footer shows the friendly id (handle·fingerprint)
 - A signed card's footer now reads `<handle>·<fingerprint>` (e.g. `olivia·z8jrr2`)

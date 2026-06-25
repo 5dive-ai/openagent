@@ -54,6 +54,7 @@
           "required": ["base"],
           "additionalProperties": false,
           "properties": {
+            "provider": { "type": "string", "description": "TTS provider the voice names belong to, e.g. \"google-gemini\" (default), \"elevenlabs\", \"openai\", \"playht\". Keeps the spec vendor-neutral: `base`/`id` are interpreted within this provider's catalog." },
             "base": { "type": "string" },
             "style": { "type": "string" },
             "ref": { "type": "string" },

@@ -192,11 +192,12 @@ function autoMintIdentity(file) {
   const keyfile = file.replace(/\.(persona\.)?ya?ml$/i, "") + ".key";
   fs.writeFileSync(keyfile, kp.privateKey, { mode: 0o600 });
   const did = didKeyFromPublicKey(signed.provenance.created_by.key);
+  const fid = friendlyId(signed.id || "", did).display; // e.g. olivia·z6Mk… → olivia·z8jrr2
   process.stdout.write(
-    `${green("🔑 minted identity")} ${dim(did)}\n` +
+    `${green("🔑 minted identity")} ${bold(fid)} ${dim(`(${did})`)}\n` +
     `        ${dim(`private key → ${keyfile} (keep it safe & private; you'll need it to re-sign if you edit the persona)`)}\n`
   );
-  return { minted: true, did };
+  return { minted: true, did, fid };
 }
 
 async function cmdCard(args) {
@@ -259,6 +260,15 @@ async function cmdCard(args) {
   // renders (embeds, avatars, registry) stay non-mutating. No-op if already signed.
   if (animate && !noSign) autoMintIdentity(file);
 
+  // Friendly id (handle·fingerprint) for the success line — matches the card
+  // footer + `openagent id`. Signed personas only; blank otherwise.
+  let fidTag = "";
+  try {
+    const p = loadPersona(file);
+    const k = p && p.provenance && p.provenance.created_by && p.provenance.created_by.key;
+    if (k) fidTag = `${bold(friendlyId(p.id || "", didKeyFromPublicKey(k)).display)} · `;
+  } catch (_) { /* unsigned → no id tag */ }
+
   if (animate) {
     const explicitFormat = !!format;
     // Default the share artifact to mp4 when ffmpeg is here — it inline-plays on
@@ -273,7 +283,7 @@ async function cmdCard(args) {
     const kb = Math.round(res.bytes / 1024);
     const faceNote = res.faceResolved ? "" : dim(" · no face (monogram)");
     process.stdout.write(
-      `${green("✓ CARD")}  ${res.outPath} ${dim(`(${res.format} · ${res.width}×${res.height} · ${res.frames}f@${res.fps}fps · ${kb}KB)`)} — ${tierTag(res.tier)} ${dim(`· ${res.completeness}% complete`)}${faceNote}\n`
+      `${green("✓ CARD")}  ${res.outPath} ${dim(`(${res.format} · ${res.width}×${res.height} · ${res.frames}f@${res.fps}fps · ${kb}KB)`)} — ${tierTag(res.tier)} ${dim(`· ${res.completeness}% complete`)}${faceNote}\n`.replace("— ", `— ${fidTag}`)
     );
     // Steer toward the best share artifact.
     if (res.format === "apng" && res.sharperWithFfmpeg) {
@@ -292,7 +302,7 @@ async function cmdCard(args) {
   const kb = Math.round(res.bytes / 1024);
   const faceNote = res.faceResolved ? "" : dim(" · no face (monogram)");
   process.stdout.write(
-    `${green("✓ CARD")}  ${res.outPath} ${dim(`(${res.width}×${res.height}, ${kb}KB)`)} — ${tierTag(res.tier)} ${dim(`· ${res.completeness}% complete`)}${faceNote}\n`
+    `${green("✓ CARD")}  ${res.outPath} ${dim(`(${res.width}×${res.height}, ${kb}KB)`)} — ${tierTag(res.tier)} ${dim(`· ${res.completeness}% complete`)}${faceNote}\n`.replace("— ", `— ${fidTag}`)
   );
   return 0;
 }

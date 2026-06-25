@@ -43,7 +43,8 @@ A custom voice is reproducible from its **base + style**, not a fragile per-gene
 
 | Field | Req | Notes |
 |-------|-----|-------|
-| `base` | ✓ | the named underlying voice (e.g. a Gemini/Flow voice like `Fenrir`, `Sadaltager`). |
+| `provider` | – | TTS provider the voice names belong to — `google-gemini` (default), `elevenlabs`, `openai`, `playht`, … Keeps the spec **vendor-neutral**: `base`/`id` are read within this provider's catalog. Omit to default to `google-gemini`. |
+| `base` | ✓ | the named underlying voice, *within `provider`* (e.g. `Fenrir`/`Sadaltager` on google-gemini, `Rachel` on elevenlabs). |
 | `style` | – | the direction layered on the base: pace, energy, behavior. |
 | `ref` | – | path/URL to a canonical ~10s reference clip — the audio anchor. |
 | `id` | – | a stable provider voice id if the ref has been cloned (e.g. an ElevenLabs id). |
