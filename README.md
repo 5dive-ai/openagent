@@ -41,7 +41,7 @@ Your agent introspects its own role, voice, and behavior, emits a valid `<id>.pe
 No agent handy? Render one of ours:
 
 ```
-npx github:5dive-ai/openagent card examples/marcus.persona.yaml -o marcus.png
+npx @5dive/openagent card examples/marcus.persona.yaml -o marcus.png
 ```
 
 That's Marcus, a founding engineer of a company run entirely by AI agents.
@@ -81,7 +81,7 @@ role, voice, face) and writes a schema-valid `<id>.persona.yaml` you can render 
 card from immediately — then validates it and shows your tier + next rung:
 
 ```
-npx github:5dive-ai/openagent init
+npx @5dive/openagent init
 ```
 
 Flags pre-fill answers for a faster path: `init --name Nova --role "Support Lead"`.
@@ -150,7 +150,7 @@ A persona file is only useful if it conforms. The validator checks any
 and prints a clear pass/fail with readable errors:
 
 ```
-npx github:5dive-ai/openagent validate marcus.persona.yaml
+npx @5dive/openagent validate marcus.persona.yaml
 ✓ PASS  marcus.persona.yaml (id: marcus)
 ```
 
@@ -169,14 +169,14 @@ drops straight into CI. Validate multiple files in one call:
 `card` turns a persona into a shareable "trading card" — the whole identity in one image, **animated by default**.
 
 ```
-npx github:5dive-ai/openagent card marcus.persona.yaml
+npx @5dive/openagent card marcus.persona.yaml
 ✓ CARD  marcus.card.mp4 (mp4 · 720×1008 · 24f@20fps · 64KB)
 ```
 
 A plain render produces the card **in motion** — that's what gets shared. Want a still PNG (for an avatar, a README, or the registry)? Just ask for one:
 
 ```
-npx github:5dive-ai/openagent card marcus.persona.yaml -o marcus.png
+npx @5dive/openagent card marcus.persona.yaml -o marcus.png
 ✓ CARD  marcus.png (900×1260, ...KB)
 ```
 
@@ -190,8 +190,8 @@ The holographic frame only really reads *in motion* — so motion is the default
 The foil sweep, glow, and (for Mythical) the rainbow holo flow loop seamlessly.
 
 ```
-npx github:5dive-ai/openagent card marcus.persona.yaml                          # mp4 (or apng) — the default
-npx github:5dive-ai/openagent card marcus.persona.yaml --static -o marcus.png   # opt out to a still
+npx @5dive/openagent card marcus.persona.yaml                          # mp4 (or apng) — the default
+npx @5dive/openagent card marcus.persona.yaml --static -o marcus.png   # opt out to a still
 ```
 
 - **Tier-aware motion** — Common is still, Rare gets a subtle glow breath, Epic/Legendary a gold foil sweep, Mythical the full rainbow holo flow (matching the hero clip up top).
@@ -238,7 +238,7 @@ holographic treatment that only reads in motion (see the card animating up top).
 climb to:
 
 ```
-npx github:5dive-ai/openagent tier marcus-ops.persona.yaml
+npx @5dive/openagent tier marcus-ops.persona.yaml
 RARE · 63% complete  marcus-ops.persona.yaml
   ✓ Rare — rolled from your did:key. Permanent; it never changes.
   ↑ only climb: Mythical — get conferred Mythical by a trusted signed registry — the path is yet to be seen (raise completeness + collect badges meanwhile)
@@ -252,7 +252,7 @@ the registry), so a single pass tells you whether the file is legal *and* where
 it stands:
 
 ```
-npx github:5dive-ai/openagent validate marcus-ops.persona.yaml
+npx @5dive/openagent validate marcus-ops.persona.yaml
 ✓ PASS  marcus-ops.persona.yaml (id: marcus-ops) — RARE · 63% complete
         ↑ next: Mythical — get conferred Mythical by a trusted signed registry — the path is yet to be seen (raise completeness + collect badges meanwhile)
         🎖  badges: signed, remixed
@@ -303,7 +303,7 @@ to prompt steering, then writes a WAV. Core-spec only (reads `voice.audio`, no
 registry).
 
 ```
-GEMINI_API_KEY=… npx github:5dive-ai/openagent speak marcus.persona.yaml "ship it." -o marcus.wav
+GEMINI_API_KEY=… npx @5dive/openagent speak marcus.persona.yaml "ship it." -o marcus.wav
 ```
 
 Prebuilt TTS renders the **base** voice (an approximation). For a character's
@@ -320,7 +320,7 @@ the likeness (`face.anchor` + `face.recipe`) and the demeanor (`behavior`).
 Engine-neutral — the same output drops into Flow, Veo, Runway, Pika, Kling, or Luma.
 
 ```
-npx github:5dive-ai/openagent flow marcus.persona.yaml "at his desk reviewing a PR, late evening"
+npx @5dive/openagent flow marcus.persona.yaml "at his desk reviewing a PR, late evening"
 ```
 
 Add `--json` for the structured form (reference paths + prompt + seed).
@@ -337,7 +337,7 @@ The CLI **ships and verifies** this registry so Mythical stays *conferred, not f
 - An unsigned or tampered registry is **ignored (fail-closed)**.
 
 ```
-npx github:5dive-ai/openagent registry
+npx @5dive/openagent registry
 # ✓ REGISTRY signed … · Mythical-eligible (6): dario, dude, lilbro, marcus, olivia, theo
 ```
 
@@ -352,7 +352,7 @@ Add trusted sources three ways (lowest → highest precedence):
 To publish one: sign your `index.json` (a `{ "slugs": [...] }` list) with an ed25519 key, serve `index.json` + `index.json.sig`, and hand consumers your public key.
 
 ```
-npx github:5dive-ai/openagent registry --registry name=acme,url=https://acme.dev/index.json,key=@acme.pub
+npx @5dive/openagent registry --registry name=acme,url=https://acme.dev/index.json,key=@acme.pub
 # ✓ REGISTRY …
 #   trusted sources (2):
 #     ✓ 5dive (anchor) …   ✓ acme 3 signed
@@ -390,7 +390,7 @@ The core schema is **closed** — unknown fields are rejected, not silently pass
 Personas are meant to be shared and forked, like dotfiles. Check your tier, then publish to the public character-packs registry:
 
 ```
-npx github:5dive-ai/openagent tier my-agent.persona.yaml
+npx @5dive/openagent tier my-agent.persona.yaml
 # then open a PR to github.com/5dive-ai/character-packs
 ```
 
