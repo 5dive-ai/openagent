@@ -484,10 +484,13 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   // shortDidKey keeps the multibase marker + tail for the card handle.
   const short = provenance.shortDidKey(did);
   check("shortDidKey keeps z marker + tail", short.startsWith("z…") && did.endsWith(short.slice(2)));
-  // Signed personas carry the handle on the card; unsigned ones stay byte-identical.
+  // Signed personas carry the FRIENDLY id (handle·fingerprint) on the card;
+  // unsigned ones stay byte-identical (no fingerprint id).
   const cardWithDid = buildSvg(opsDoc, null, "legendary");
-  check("signed persona's card shows the did:key handle", cardWithDid.includes(provenance.shortDidKey(opsVerdict.did)));
-  check("unsigned persona's card carries no did handle", !buildSvg(marcusDoc, null, "rare").includes("z…"));
+  const opsFriendly = `${opsDoc.id}·${provenance.fingerprintFromDidKey(opsVerdict.did)}`;
+  check("signed persona's card shows the friendly id (handle·fingerprint)", cardWithDid.includes(opsFriendly));
+  check("signed card no longer shows the raw did tail", !cardWithDid.includes(provenance.shortDidKey(opsVerdict.did)));
+  check("unsigned persona's card has no friendly-id fingerprint", !buildSvg(marcusDoc, null, "rare").includes(`${marcusDoc.id}·`));
 
   // 8. Conformance suite — run the portable manifest against this impl.
   console.log("\n-- conformance suite --");

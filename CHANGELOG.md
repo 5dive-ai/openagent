@@ -15,6 +15,14 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-06-25 · CLI
+### Changed — card footer shows the friendly id (handle·fingerprint)
+- A signed card's footer now reads `<handle>·<fingerprint>` (e.g. `olivia·z8jrr2`)
+  instead of the raw did:key tail (`z…U9FfqQfE`) — the same memorable, verifiable
+  id `openagent id` prints and the gallery uses. Unsigned cards are unchanged
+  (byte-identical: id + version, no fingerprint). The full did:key still resolves
+  via `verify` / the gallery card page.
+
 ## [0.22.0] — 2026-06-25 · CLI
 ### Added — `openagent id`: user-friendly handle·fingerprint
 - New `id` command emits a friendly, shareable agent id =
