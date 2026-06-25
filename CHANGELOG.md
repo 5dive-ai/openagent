@@ -15,6 +15,22 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-06-25 · CLI
+### Changed — rarity roll recalibrated (curve v2)
+- Rolled-tier odds rebalanced **Common 60→40, Rare 25→30, Epic 11→20,
+  Legendary 4→10** so Common is no longer the default majority and the top end
+  is more attainable. Odds still sum to 1 and are monotonic. Because the roll is
+  a pure function of `did:key`, this re-rolls existing identities on next render.
+- Added a tiny, closed **founding-cast pin** (`TIER_PINS`, keyed by immutable
+  `did:key`) holding the 5dive team at its pre-cutover tier across the curve
+  change. A pin overrides the roll but never conferral (in-registry → Mythical).
+
+## [0.19.0] — 2026-06-25 · CLI
+### Added — placeholder `org.name` guard
+- `validate` and `card` now emit a non-fatal warning when `org.name` is left as a
+  template placeholder (`5dive`, `your org`, `<Your Org>`, `acme`, …), so a copied
+  template can't silently ship someone else's brand on a card footer.
+
 ## [0.18.0] — 2026-06-24 · CLI
 ### Changed — `@resvg/resvg-js` is now an OPTIONAL dependency (lighter install)
 - The native rasterizer is needed ONLY to turn the card SVG into a PNG/animated

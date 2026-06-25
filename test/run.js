@@ -138,7 +138,7 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("a signed persona is graded via its own did:key",
     computeTier(opsSigned, { faceResolved: true, schemaValid: true }).tier !== "Ungraded");
 
-  // Distribution: over many identities, ≈ 60/25/11/4 (tolerance for sampling).
+  // Distribution: over many identities, ≈ 40/30/20/10 (curve v2; tolerance for sampling).
   (() => {
     const N = 4000;
     const c = { Common: 0, Rare: 0, Epic: 0, Legendary: 0 };
@@ -146,10 +146,34 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
       c[computeTier(marcusDoc, { didKey: "did:key:z6Mk" + i, schemaValid: true }).tier]++;
     }
     const pct = (k) => c[k] / N;
-    check("distribution ≈ Common 60%", Math.abs(pct("Common") - 0.6) < 0.04);
-    check("distribution ≈ Rare 25%", Math.abs(pct("Rare") - 0.25) < 0.04);
-    check("distribution ≈ Epic 11%", Math.abs(pct("Epic") - 0.11) < 0.03);
-    check("distribution ≈ Legendary 4%", Math.abs(pct("Legendary") - 0.04) < 0.02);
+    check("distribution ≈ Common 40%", Math.abs(pct("Common") - 0.4) < 0.04);
+    check("distribution ≈ Rare 30%", Math.abs(pct("Rare") - 0.3) < 0.04);
+    check("distribution ≈ Epic 20%", Math.abs(pct("Epic") - 0.2) < 0.03);
+    check("distribution ≈ Legendary 10%", Math.abs(pct("Legendary") - 0.1) < 0.03);
+  })();
+
+  // Founding-cast pins: the 5dive team holds its pre-curve-v2 tier regardless of
+  // what the new curve would roll their did:key to. Keyed by immutable did:key.
+  (() => {
+    const PINS = {
+      "did:key:z6MkfxJdF5PhqHcgpKNy9vY6Y9MAzZJ9EqqVywXqFJUa8VaG": "Legendary", // marcus
+      "did:key:z6MkmCyZtZkk37mb46ekUGKkW5zLBU94u1ZPS5BTU9FfqQfE": "Legendary", // olivia
+      "did:key:z6MkqKc8VDUidM6VXoxeURDAdC6EEH2Mi4SqkB8NRpkXhbJL": "Epic",      // lilbro
+      "did:key:z6Mkw1KjXTrwEMRqMYhNJobvboNFMM9AQUt1ZNudxV45vsjK": "Epic",      // theo
+      "did:key:z6Mkey1FXu4tk4UMxDEbosfD2Gqx6u7qj3EP2atsEuAkSRwL": "Rare",      // dario
+      "did:key:z6Mki47TZEj3KTmVW2naTPU1FzqwxhN74Qq5CttQxYLehHUh": "Common",    // dude
+    };
+    for (const [did, want] of Object.entries(PINS)) {
+      const got = computeTier(marcusDoc, { didKey: did, schemaValid: true }).tier;
+      check(`founding pin holds: ${did.slice(0, 16)}… → ${want}`, got === want);
+    }
+    // A pin must NOT override conferral — an in-registry founding id is still Mythical.
+    const pinnedButConferred = computeTier(marcusDoc, {
+      didKey: "did:key:z6Mki47TZEj3KTmVW2naTPU1FzqwxhN74Qq5CttQxYLehHUh", // dude (pinned Common)
+      schemaValid: true,
+      inRegistry: true,
+    }).tier;
+    check("conferral beats a pin (in-registry → Mythical)", pinnedButConferred === "Mythical");
   })();
 
   check("completeness is a percentage", r1.completeness > 0 && r1.completeness <= 100);
