@@ -15,6 +15,26 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.26.0] — 2026-06-25 · CLI · lower the authoring barrier
+
+**Author a persona without reading the whole spec.** Three on-ramps, no schema
+changes (DIVE-688):
+
+- **`openagent init`** — interactive Q&A scaffolds a schema-valid
+  `<id>.persona.yaml` (name, role, org, behavior, face, written voice,
+  posts_about, links), then validates it in place and prints your tier + next
+  rung + the `card` next step. Flags (`--name/--role/--id/--org/-o/--force`)
+  pre-fill answers; refuses to clobber an existing file without `--force`;
+  non-TTY is a clear usage error.
+- **SchemaStore** — `schema/schemastore.catalog.json` + `docs/SCHEMASTORE.md`
+  ready the schema for [SchemaStore](https://www.schemastore.org/), so editors
+  auto-apply autocomplete + inline validation to any `*.persona.yaml`. A
+  `# yaml-language-server: $schema=…` modeline opts in today.
+- **GitHub Action** — `action.yml` (reusable composite,
+  `uses: 5dive-ai/openagent@main`) validates `**/*.persona.{yaml,json}` on PR —
+  CI for adopters and the registry. `.github/workflows/validate.yml` dogfoods it
+  on this repo plus runs the test suite.
+
 ## [0.25.0] — 2026-06-25 · spec 0.2 + CLI · did:web org verification
 
 **Verified ORG badge.** `org.name` was a free-text claim — anyone could brand a

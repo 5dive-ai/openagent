@@ -9,6 +9,7 @@ const { registryStatus } = require("../lib/registry");
 const { speak } = require("../lib/speak");
 const { generateKeypair, signPersona, verifyPersona, didKeyFromPublicKey, shortDidKey, friendlyId, verifyFriendlyId } = require("../lib/provenance");
 const { flow } = require("../lib/flow");
+const { runInit } = require("../lib/init");
 const YAML = require("yaml");
 const fs = require("fs");
 
@@ -50,6 +51,7 @@ function faceResolvesOffline(ref, baseDir) {
 const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (v0.1)
 
 ${bold("Usage")}
+  openagent init [-o <file>] [--name <n>] [--role <r>] [--id <id>] [--org <o>] [--force]
   openagent validate <persona-file> [<persona-file> ...]
   openagent card <persona-file> [-o <out>] [--format apng|gif|webp|mp4] [--frames N] [--fps N] [--width px]
                                             (animated by default; -o *.png or --static for a still PNG)
@@ -67,6 +69,13 @@ ${bold("Usage")}
   openagent flow <persona-file> "<scene>" [--json]
   openagent --help
   openagent --version
+
+${bold("init")}
+  Interactive Q&A that scaffolds a schema-valid <id>.persona.yaml — answer a
+  handful of plain questions (name, role, voice, face) and get a file you can
+  validate + render a card from immediately. Defaults shown in [brackets];
+  press enter to accept. Flags pre-fill answers for a faster path. Writes
+  <id>.persona.yaml (or -o <file>); refuses to clobber unless --force.
 
 ${bold("validate")}
   Checks a *.persona.yaml (or .json) file against the OpenAgent v0.1
@@ -838,6 +847,35 @@ async function cmdOrg(args) {
   return 2;
 }
 
+async function cmdInit(args) {
+  const opts = {};
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "-o" || a === "--out") opts.out = args[++i];
+    else if (a === "--name") opts.name = args[++i];
+    else if (a === "--role") opts.role = args[++i];
+    else if (a === "--id") opts.id = args[++i];
+    else if (a === "--org") opts.org = args[++i];
+    else if (a === "--force") opts.force = true;
+    else {
+      process.stderr.write(red(`init: unknown argument: ${a}\n\n`) + USAGE);
+      return 2;
+    }
+  }
+  const r = await runInit(opts);
+  if (r.code !== 0) return r.code;
+
+  // Round-trip the scaffold through the real validator so init never emits a
+  // file that `validate` would reject — and show the same tier/next-rung quest
+  // line, so the user immediately sees how to climb the ladder.
+  process.stdout.write(`\n${green("✓ wrote")} ${bold(r.file)}\n\n`);
+  const code = cmdValidate([r.file]);
+  process.stdout.write(
+    `\n${dim("next:")} openagent card ${r.file}   ${dim("→ mint your holo card")}\n`
+  );
+  return code === 0 ? 0 : code;
+}
+
 function cmdValidate(files) {
   if (files.length === 0) {
     process.stderr.write(red("validate: no persona file given\n\n") + USAGE);
@@ -960,6 +998,7 @@ async function main(argv) {
   const cmd = args[0];
   const rest = args.slice(1);
 
+  if (cmd === "init") return cmdInit(rest);
   if (cmd === "validate") return cmdValidate(rest);
   if (cmd === "card") return cmdCard(rest);
   if (cmd === "tier") return cmdTier(rest);

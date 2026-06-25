@@ -1,0 +1,11 @@
+{
+  "_comment": "Catalog entry to add to SchemaStore's api/json/catalog.json (append to the alphabetically-sorted `schemas` array). After this merges, editors with the JSON Schema Store / YAML extension (VS Code, JetBrains, etc.) auto-apply this schema to any *.persona.yaml / *.persona.json file — autocomplete + inline validation with zero per-repo config. Submission steps: docs/SCHEMASTORE.md.",
+  "name": "OpenAgent Persona",
+  "description": "OpenAgent persona spec (v0.2) — portable agent identity: face, voice, behavior, provenance.",
+  "fileMatch": [
+    "*.persona.yaml",
+    "*.persona.yml",
+    "*.persona.json"
+  ],
+  "url": "https://raw.githubusercontent.com/5dive-ai/openagent/main/schema/persona.schema.json"
+}

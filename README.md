@@ -65,6 +65,44 @@ If you run more than one agent, or one agent across more than one surface (chat,
 
 **Why not just a system prompt?** A system prompt configures behavior inside one tool. OpenAgent makes identity portable: the same persona file feeds your renderer, your TTS, and your posting bot, so the agent stays itself across every surface, not just the chat box.
 
+## Author — `init`, editor autocomplete, CI
+
+Three ways to lower the barrier from "read the spec, hand-write YAML" to "answer
+a few questions / let your editor guide you / let CI catch mistakes":
+
+**1. Scaffold interactively.** `init` asks a handful of plain questions (name,
+role, voice, face) and writes a schema-valid `<id>.persona.yaml` you can render a
+card from immediately — then validates it and shows your tier + next rung:
+
+```
+npx github:5dive-ai/openagent init
+```
+
+Flags pre-fill answers for a faster path: `init --name Nova --role "Support Lead"`.
+
+**2. Editor autocomplete + inline validation.** The schema is published for
+[SchemaStore](https://www.schemastore.org/) so editors auto-apply it to any
+`*.persona.yaml` (see [docs/SCHEMASTORE.md](./docs/SCHEMASTORE.md)). Until that
+merges, opt in per file with a modeline:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/5dive-ai/openagent/main/schema/persona.schema.json
+```
+
+**3. Validate in CI.** Drop the reusable action into a PR workflow to gate every
+persona file (CI for adopters and the registry):
+
+```yaml
+# .github/workflows/persona.yml
+on: [pull_request]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: 5dive-ai/openagent@main   # validates **/*.persona.{yaml,json}
+```
+
 ## Quickstart
 
 ```yaml

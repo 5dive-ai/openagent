@@ -1,0 +1,39 @@
+name: "OpenAgent persona validate"
+description: "Validate *.persona.yaml / *.persona.json files against the OpenAgent spec on PR (CI for adopters and the registry)."
+branding:
+  icon: "check-circle"
+  color: "purple"
+
+inputs:
+  files:
+    description: "Space- or newline-separated persona files/globs to validate. Defaults to every **/*.persona.{yaml,json} in the repo."
+    required: false
+    default: ""
+  ref:
+    description: "Git ref of @5dive/openagent to run (branch, tag, or commit). Defaults to the action's own ref."
+    required: false
+    default: "main"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate personas
+      shell: bash
+      env:
+        OA_FILES: ${{ inputs.files }}
+        OA_REF: ${{ inputs.ref }}
+      run: |
+        set -euo pipefail
+        if [ -n "${OA_FILES// /}" ]; then
+          # Caller supplied explicit files/globs.
+          # shellcheck disable=SC2206
+          files=( ${OA_FILES} )
+        else
+          shopt -s globstar nullglob
+          files=( **/*.persona.yaml **/*.persona.json )
+        fi
+        if [ ${#files[@]} -eq 0 ]; then
+          echo "openagent: no persona files to validate"; exit 0
+        fi
+        echo "openagent: validating ${#files[@]} file(s)"
+        npx --yes "github:5dive-ai/openagent#${OA_REF}" validate "${files[@]}"

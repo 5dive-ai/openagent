@@ -1,0 +1,41 @@
+name: validate
+
+# CI for the OpenAgent repo itself: prove the tooling works and every shipped
+# persona (examples + anything a PR touches) is schema-valid. This is the same
+# gate adopters get from the reusable action in action.yml — we dogfood it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci || npm install
+      - name: Unit + conformance tests
+        run: npm test
+
+  validate-personas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci || npm install
+      - name: Validate all *.persona.yaml in the repo
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          files=( **/*.persona.yaml **/*.persona.json )
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no persona files found"; exit 0
+          fi
+          echo "validating ${#files[@]} persona file(s)"
+          node bin/openagent.js validate "${files[@]}"

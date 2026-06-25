@@ -546,6 +546,26 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   // Attested persona still validates against the schema.
   check("attested persona still schema-valid", validate(agentSigned).ok === true);
 
+  // 7b. init scaffold — buildPersona() must emit a schema-valid persona, and
+  // renderYaml() must round-trip through the YAML parser back to that object.
+  console.log("\n-- init wizard --");
+  const initLib = require("../lib/init");
+  const scaffold = initLib.buildPersona({
+    name: "Nova", role: "Support Lead", id: "nova", orgName: "5dive",
+    behavior: "answers tickets fast", postsAbout: ["support"],
+    faceRef: "./faces/nova.png", faceAnchor: "warm smile",
+    voiceRules: ["clear and kind"], voiceSample: "fix is live.",
+  });
+  check("init scaffold is schema-valid", validate(scaffold).ok === true);
+  const initYaml = initLib.renderYaml(scaffold);
+  check("init YAML round-trips to a valid persona", validate(YAML.parse(initYaml)).ok === true);
+  check("init slugifies names to ids", initLib.slugify("Marcus Ops!") === "marcus-ops");
+  check("init omits empty optional blocks", validate(initLib.buildPersona({
+    name: "Min", role: "Agent", id: "min", behavior: "does things",
+    faceRef: "./faces/min.png", faceAnchor: "neutral",
+    voiceRules: ["terse"], voiceSample: "done.",
+  })).ok === true);
+
   // 8. Conformance suite — run the portable manifest against this impl.
   console.log("\n-- conformance suite --");
   failures += runConformance();
