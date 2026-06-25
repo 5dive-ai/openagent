@@ -1,10 +1,13 @@
 # Releasing `@5dive/openagent`
 
-A release is **not done** until the version tag exists *and* the skill pin
-points at it. Skipping either re-introduces DIVE-696: the `openagent` skill runs
-the CLI via `npx`, and `npx` caches GitHub clones **per ref** — so an unpinned
-ref (or a stale npm publish) silently serves an old renderer to fresh agents.
-A fresh version tag is what changes the cache key every release.
+A release is **not done** until the npm version is published *and* the skill pin
+points at it. Skipping either re-introduces DIVE-696/701: the `openagent` skill
+runs the CLI via `npx`, and `npx` caches per version — so a stale npm publish (or
+an unpinned github ref, which caches per-ref and can serve a partial clone missing
+bundled fonts) silently serves an old renderer to fresh agents. Publishing the new
+npm version and pinning the skill to it is what guarantees freshness every release.
+(Since DIVE-699, npm is the authoritative channel and publishing is automated via
+a stored token — see step 5.)
 
 ## Checklist (do these in order, every release)
 
@@ -19,26 +22,37 @@ A fresh version tag is what changes the cache key every release.
    gh api -X POST repos/5dive-ai/openagent/git/refs \
      -f ref="refs/tags/vX.Y.Z" -f sha="<release-commit-sha>"
    ```
-4. **Bump the skill pin.** In [`5dive-ai/skills`](https://github.com/5dive-ai/skills),
-   edit `openagent/SKILL.md` and bump every `npx github:5dive-ai/openagent#vA.B.C`
-   to `#vX.Y.Z` (a single find/replace — the count should match before/after),
-   then commit + push. This is the step that actually delivers the new renderer
-   to newly created agents.
+4. **Publish to npm.** Run the helper — it reads the stored automation token,
+   publishes `package.json`'s version, and never writes the token to disk
+   persistently:
    ```bash
-   sed -i 's/openagent#v[0-9.]*/openagent#vX.Y.Z/g' openagent/SKILL.md
-   grep -c 'openagent#vX.Y.Z' openagent/SKILL.md   # sanity-check the count
+   ./scripts/npm-publish.sh --dry-run   # auth + pack check
+   ./scripts/npm-publish.sh             # publish @5dive/openagent@X.Y.Z
+   npm view @5dive/openagent version    # confirm X.Y.Z is live
    ```
-5. **(Optional, gated) Publish npm.** `npm publish` requires the npm publish
-   token (a lodar-held secret) — do **not** self-serve it. The pinned github ref
-   from step 4 is authoritative regardless; npm is a convenience mirror that may
-   lag. If you publish, keep the npm `version` equal to the tag.
+5. **Bump the skill pin.** In [`5dive-ai/skills`](https://github.com/5dive-ai/skills),
+   edit `openagent/SKILL.md` and bump every `npx @5dive/openagent@A.B.C` to
+   `@X.Y.Z` (a single find/replace — the count should match before/after), then
+   commit + push. This delivers the new renderer to newly created agents.
+   ```bash
+   sed -i 's|@5dive/openagent@[0-9.]*|@5dive/openagent@X.Y.Z|g' openagent/SKILL.md
+   grep -c '@5dive/openagent@X.Y.Z' openagent/SKILL.md   # sanity-check the count
+   ```
+6. **Tag the release commit** for provenance — immutable, one tag per version:
+   ```bash
+   git tag vX.Y.Z <release-commit> && git push origin vX.Y.Z
+   ```
 
-## Why the github pin, not npm
+## Why npm, not the github pin
 
-npm publishing is gated on a human-held token, so the npm package drifts behind
-`main` (it sat at `0.22.0` while `main` was `0.27.0`). The skill therefore pins
-the **github ref** as the source of truth: no secret needed, immutable per
-release, and `npx`-cache-correct. See DIVE-696.
+Earlier the skill pinned the **github ref** because npm publishing was gated on a
+human-held token and drifted behind `main` (it sat at `0.22.0` while `main` was
+`0.27.0` — DIVE-696). DIVE-699 restored npm publishing with a stored automation
+token (`/etc/5dive/connectors/npm.env`, used only by `scripts/npm-publish.sh`), so
+npm is now authoritative: its tarball **bundles every font/asset** (a github
+per-ref clone can serve a partial build → monospace font fallback, DIVE-701) and
+`npx @5dive/openagent@X.Y.Z` is cache-correct per version. The github ref remains
+documented in the skill as a fallback only.
 
 ## Existing agents
 
