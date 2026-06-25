@@ -15,6 +15,13 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.21.1] — 2026-06-25 · CLI
+### Changed — motion intensity laddered to rarity
+- The baseline motion (waveform pulse depth + speed, glow-breath depth, Ken Burns
+  push) now scales with tier: Common the subtlest, Mythical the most alive. Motion
+  reinforces the rarity hierarchy instead of flattening it (Creative note). Lower
+  tiers also get a gentler portrait push-in, reducing warp on AI-gen faces.
+
 ## [0.21.0] — 2026-06-25 · CLI
 ### Added — universal card motion (every tier)
 - Animated cards now carry baseline motion on ALL tiers, not just the top ones:
