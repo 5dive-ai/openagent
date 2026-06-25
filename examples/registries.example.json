@@ -1,0 +1,16 @@
+{
+  "//": "Copy to ~/.openagent/registries.json to trust additional signed Mythical registries (DIVE-689). Each source is verified against its OWN ed25519 public key; verified slugs[] are unioned with the built-in 5dive anchor. Fail-closed: an unsigned/forged/keyless source is ignored.",
+  "registries": [
+    {
+      "name": "acme",
+      "url": "https://acme.dev/openagent/index.json",
+      "sigUrl": "https://acme.dev/openagent/index.json.sig",
+      "publicKeyPath": "~/.openagent/keys/acme.pub"
+    },
+    {
+      "name": "partner-inline-key",
+      "url": "https://partner.example/index.json",
+      "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA....your-ed25519-spki-key....\n-----END PUBLIC KEY-----\n"
+    }
+  ]
+}

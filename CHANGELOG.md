@@ -15,6 +15,28 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-06-25 · CLI · federated signed registries
+
+**DIVE-689 — anyone can run their own signed Mythical registry.** Mythical was
+conferred only by the 5dive character-packs registry, making OpenAgent a
+5dive-only thing. Now it's a standard others build on: the CLI trusts MULTIPLE
+signed registries, each verified against its own declared ed25519 key.
+
+- **Federated trust, fail-closed per source.** The 5dive snapshot remains the
+  built-in trust anchor (key baked in, ships offline). Operators add more
+  trusted sources three ways (precedence low→high): a `~/.openagent/registries.json`
+  config (`{ "registries": [{name,url,publicKey|publicKeyPath,sigUrl?}] }`), the
+  `OPENAGENT_REGISTRIES` env (inline JSON or a path), or a repeatable
+  `--registry name=acme,url=…/index.json,key=@/path/to.pub[,sig=…]` flag.
+- Each source's live `index.json` is trusted only if `index.json.sig` verifies
+  against THAT source's key; verified `slugs[]` are UNIONED across all trusted
+  sources (a source can ADD eligibility, never revoke another's). Unsigned,
+  forged, mis-keyed, or keyless sources are ignored — no unsigned registry can
+  ever confer Mythical. A federated source cannot shadow the `5dive` anchor name.
+- `--registry` works on `registry`, `tier`, and `card`. `registry` now prints a
+  per-source trust table (✓ signed / ⚠ unsigned-or-forged / ✗ unreachable) and
+  `registry --json` carries a `sources[]` array.
+
 ## [0.26.0] — 2026-06-25 · CLI · lower the authoring barrier
 
 **Author a persona without reading the whole spec.** Three on-ramps, no schema

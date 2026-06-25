@@ -15,6 +15,18 @@ const fs = require("fs");
 
 const pkg = require("../package.json");
 
+// Collect repeatable `--registry <spec>` flags (federated Mythical registries,
+// DIVE-689). Each spec is `name=acme,url=...,key=@/path/to.pub[,sig=...]` and is
+// forwarded verbatim to lib/registry, which verifies each source's index
+// against its own declared key. Returns [] when none given.
+function registryFlagsFrom(args) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--registry" && args[i + 1]) out.push(args[++i]);
+  }
+  return out;
+}
+
 // Color only when stdout is a TTY.
 const useColor = process.stdout.isTTY;
 const c = (code, s) => (useColor ? `\x1b[${code}m${s}\x1b[0m` : s);
@@ -113,14 +125,19 @@ ${bold("tier")}
   Prints the computed rarity tier + completeness % + the gate breakdown.
   Tiers (gate ladder, highest passing wins): Common < Rare < Epic <
   Legendary < Mythical. Tiers 1-4 are a pure function of the persona file;
-  Mythical is conferred by membership in the character-packs registry.
+  Mythical is conferred by membership in any trusted signed registry.
 
-${bold("registry")}
-  Shows the official Mythical registry the CLI ships + verifies. Mythical is
-  conferred by membership, not farmable from a persona file. The bundled
-  snapshot (founding cast) is ed25519-signed and verified against a key baked
-  into the CLI; the live character-packs index is unioned on top only if it
-  carries a valid signature. --offline skips the network.
+${bold("registry")} [--json] [--offline] [--registry <spec>]
+  Shows the trusted Mythical registries the CLI verifies. Mythical is conferred
+  by membership in ANY trusted signed registry, not farmable from a persona file.
+  The bundled 5dive snapshot (founding cast) is ed25519-signed and verified
+  against a key baked into the CLI; each live registry index is unioned on top
+  only if it carries a valid signature against THAT source's own key.
+  FEDERATED: anyone can run their own signed registry. Add trusted sources via
+  ~/.openagent/registries.json ({ "registries": [{name,url,publicKey|publicKeyPath,sigUrl?}] }),
+  the OPENAGENT_REGISTRIES env (inline JSON or a path), or repeatable
+  --registry name=acme,url=https://…/index.json,key=@/path/to.pub[,sig=…].
+  The same --registry flag works on ${bold("tier")} and ${bold("card")}. --offline skips the network.
 
 ${bold("flow")}
   OpenAgent→gen-video adapter: emits a Flow/Veo-ready scene prompt + the
@@ -215,6 +232,7 @@ function autoMintIdentity(file) {
 async function cmdCard(args) {
   let out = null;
   let checkRegistry = true;
+  const registryFlags = registryFlagsFrom(args);
   let animate = false;
   let explicitAnimate = false;     // user passed --animate / --format
   let forceStatic = false;         // user passed --static / --png / --no-animate
@@ -225,6 +243,7 @@ async function cmdCard(args) {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "-o" || a === "--out") out = args[++i];
+    else if (a === "--registry") i++; // federated source spec, collected below
     else if (a === "--no-registry") checkRegistry = false;
     else if (a === "--animate" || a === "--animated") { animate = true; explicitAnimate = true; }
     else if (a === "--static" || a === "--png" || a === "--no-animate") forceStatic = true;
@@ -287,7 +306,7 @@ async function cmdCard(args) {
     // Telegram/X/Discord and is by far the smallest. APNG is the zero-dep
     // fallback when ffmpeg is absent.
     if (!format) format = hasFfmpeg() ? "mp4" : "apng";
-    const res = await renderAnimatedCard(file, out, { checkRegistry, format, frames, fps, width });
+    const res = await renderAnimatedCard(file, out, { checkRegistry, registryFlags, format, frames, fps, width });
     if (!res.ok) {
       process.stderr.write(red(`card: ${res.error}\n`));
       return 2;
@@ -322,7 +341,7 @@ async function cmdCard(args) {
       /* offline / unreachable domain → no badge */
     }
   }
-  const res = await renderCard(file, out, { checkRegistry, orgVerified });
+  const res = await renderCard(file, out, { checkRegistry, registryFlags, orgVerified });
   if (!res.ok) {
     process.stderr.write(red(`card: ${res.error}\n`));
     return 2;
@@ -338,7 +357,14 @@ async function cmdCard(args) {
 async function cmdTier(args) {
   const json = args.includes("--json");
   let checkRegistry = !args.includes("--no-registry");
-  const file = args.find((a) => !a.startsWith("-"));
+  const registryFlags = registryFlagsFrom(args);
+  // Drop `--registry` and its consumed spec value before hunting for the file.
+  const rest = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--registry") { i++; continue; }
+    rest.push(args[i]);
+  }
+  const file = rest.find((a) => !a.startsWith("-"));
   if (!file) {
     process.stderr.write(red("tier: no persona file given\n\n") + USAGE);
     return 2;
@@ -361,7 +387,7 @@ async function cmdTier(args) {
   }
   const face = await resolveFace(persona.face?.ref, path.dirname(path.resolve(file)));
   let inRegistry = false;
-  if (checkRegistry) inRegistry = (await fetchRegistryIds()).has(persona.id);
+  if (checkRegistry) inRegistry = (await fetchRegistryIds({ registryFlags })).has(persona.id);
   // We only reach here after validateFile passed above, so Common is satisfied.
   const t = computeTier(persona, { faceResolved: face.resolved, inRegistry, schemaValid: true });
   const badges = computeBadges(persona);
@@ -409,7 +435,8 @@ function writeBadgeLines(badges) {
 async function cmdRegistry(args) {
   const json = args.includes("--json");
   const offline = args.includes("--offline");
-  const s = await registryStatus({ offline });
+  const registryFlags = registryFlagsFrom(args);
+  const s = await registryStatus({ offline, registryFlags });
 
   if (json) {
     process.stdout.write(JSON.stringify(s, null, 2) + "\n");
@@ -428,8 +455,33 @@ async function cmdRegistry(args) {
   process.stdout.write(
     `${green("✓ REGISTRY")} ${dim(`signed ${s.signedAt}, snapshot of ${s.snapshotOf}`)}${liveNote}\n`
   );
-  // Eligible = shipped snapshot ∪ verified live.
-  const eligible = [...new Set([...s.bundled, ...s.live])].sort();
+  // Federated sources (DIVE-689): each trusted source verified against its own
+  // key. The 5dive anchor is always present; show any others the operator added.
+  const federated = (s.sources || []).filter((src) => !src.official);
+  if (federated.length) {
+    process.stdout.write(dim(`  trusted sources (${s.sources.length}):\n`));
+    for (const src of s.sources) {
+      const mark = offline
+        ? dim("·")
+        : src.signed
+        ? green("✓")
+        : src.reachable
+        ? yellow("⚠")
+        : dim("✗");
+      const note = offline
+        ? dim("(offline)")
+        : src.signed
+        ? dim(`${src.slugs.length} signed`)
+        : src.reachable
+        ? dim("unsigned/forged → ignored")
+        : dim("unreachable");
+      const tag = src.official ? dim(" (anchor)") : "";
+      process.stdout.write(`    ${mark} ${src.name}${tag} ${note}\n`);
+    }
+  }
+  // Eligible = shipped snapshot ∪ verified live from EVERY trusted source.
+  const allLive = (s.sources || []).flatMap((src) => src.slugs);
+  const eligible = [...new Set([...s.bundled, ...s.live, ...allLive])].sort();
   process.stdout.write(dim(`  Mythical-eligible (${eligible.length}): `) + eligible.join(", ") + "\n");
   return 0;
 }

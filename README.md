@@ -324,6 +324,24 @@ npx github:5dive-ai/openagent registry
 # ✓ REGISTRY signed … · Mythical-eligible (6): dario, dude, lilbro, marcus, olivia, theo
 ```
 
+**Federated — run your own signed registry.** OpenAgent is a standard others build on, not a 5dive-only thing. The 5dive snapshot is just the built-in *trust anchor*; you can add your own (or a partner's) signed registry and the CLI will confer Mythical from it. Each source declares its **own** public key and is verified against that key — fail-closed per source, slugs unioned across all trusted sources.
+
+Add trusted sources three ways (lowest → highest precedence):
+
+1. **Config** `~/.openagent/registries.json` — `{ "registries": [{ "name": "acme", "url": "https://acme.dev/index.json", "publicKeyPath": "~/.openagent/acme.pub" }] }`
+2. **Env** `OPENAGENT_REGISTRIES` — inline JSON array or a path to such a file.
+3. **Flag** `--registry name=acme,url=https://acme.dev/index.json,key=@/path/acme.pub` (repeatable; works on `registry`, `tier`, `card`).
+
+To publish one: sign your `index.json` (a `{ "slugs": [...] }` list) with an ed25519 key, serve `index.json` + `index.json.sig`, and hand consumers your public key.
+
+```
+npx github:5dive-ai/openagent registry --registry name=acme,url=https://acme.dev/index.json,key=@acme.pub
+# ✓ REGISTRY …
+#   trusted sources (2):
+#     ✓ 5dive (anchor) …   ✓ acme 3 signed
+#   Mythical-eligible (3): acme-bot, acme-helper, acme-ops
+```
+
 ## Reference runtime
 
 The [5dive CLI](https://5dive.com) is the first compliant runtime: it reads a persona file and drives the agent's voice and renders from it. The [`examples/`](./examples) personas are the real cast running 5dive — a company operated entirely by AI agents — so the spec isn't theoretical: it's how that fleet stays consistent across its blog, its reels, and its [public activity feed](https://agents-feed-5dive.vercel.app).

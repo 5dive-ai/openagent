@@ -385,6 +385,65 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("slugsOf does NOT confer Mythical from marketplace packs[] (DIVE-674)", registry.slugsOf({ packs: [{ slug: "a" }, { slug: "b" }] }).length === 0);
   check("slugsOf reads curated slugs[] shape", registry.slugsOf({ slugs: ["x", "y"] }).join() === "x,y");
 
+  // 6b. FEDERATED registries (DIVE-689) — anyone can run their own signed source.
+  {
+    // A federated operator's own ed25519 key pair.
+    const kp = crypto.generateKeyPairSync("ed25519");
+    const fedPubPem = kp.publicKey.export({ type: "spki", format: "pem" }).toString();
+    const fedIndex = Buffer.from(JSON.stringify({ slugs: ["acme-bot", "acme-helper"] }), "utf8");
+    const fedSig = crypto.sign(null, fedIndex, kp.privateKey).toString("base64");
+    // A DIFFERENT key — used to forge.
+    const evil = crypto.generateKeyPairSync("ed25519");
+    const evilSig = crypto.sign(null, fedIndex, evil.privateKey).toString("base64");
+
+    // normalizeSource: drops sources with no usable key / bad url; keeps good ones.
+    check("normalizeSource drops keyless source", registry.normalizeSource({ name: "x", url: "https://e/i.json" }) === null);
+    check("normalizeSource drops non-http url", registry.normalizeSource({ name: "x", url: "ftp://e/i", publicKey: fedPubPem }) === null);
+    const norm = registry.normalizeSource({ name: "acme", url: "https://acme.test/index.json", publicKey: fedPubPem });
+    check("normalizeSource accepts inline PEM key", norm && norm.name === "acme" && norm.publicKey.includes("BEGIN PUBLIC KEY"));
+    check("normalizeSource defaults sigUrl to url+.sig", norm && norm.sigUrl === "https://acme.test/index.json.sig");
+
+    // trustedSources: anchor always present; flag source added; anchor name can't be shadowed.
+    const flagSpec = `name=acme,url=https://acme.test/index.json,key=${fedPubPem.replace(/\n/g, "\\n")}`;
+    const ts = registry.trustedSources({ registryFlags: [flagSpec] });
+    check("trustedSources includes 5dive anchor first", ts[0].official === true && ts[0].name === "5dive");
+    check("trustedSources adds the federated flag source", ts.some((s) => s.name === "acme"));
+    const shadowAttempt = registry.trustedSources({ registryFlags: [`name=5dive,url=https://evil.test/i.json,key=${fedPubPem.replace(/\n/g, "\\n")}`] });
+    check("federated source cannot shadow the 5dive anchor name", shadowAttempt.filter((s) => s.name === "5dive").length === 1 && shadowAttempt[0].official === true);
+
+    // fetchSourceLive: mock global.fetch to serve the federated index + sig.
+    const origFetch = global.fetch;
+    const mk = (body) => ({ ok: true, arrayBuffer: async () => body, text: async () => body.toString("utf8") });
+    global.fetch = async (url) => {
+      if (url === "https://acme.test/index.json") return mk(fedIndex);
+      if (url === "https://acme.test/index.json.sig") return mk(Buffer.from(fedSig));
+      if (url === "https://acme.test/forged.sig") return mk(Buffer.from(evilSig));
+      throw new Error("unexpected url " + url);
+    };
+    try {
+      const live = await registry.fetchSourceLive(norm);
+      check("fetchSourceLive verifies against the source's OWN key", live.signed === true && live.slugs.has("acme-bot"));
+
+      const forgedSrc = registry.normalizeSource({ name: "acme", url: "https://acme.test/index.json", sigUrl: "https://acme.test/forged.sig", publicKey: fedPubPem });
+      const forged = await registry.fetchSourceLive(forgedSrc);
+      check("fetchSourceLive rejects a sig from a DIFFERENT key (forged → ignored)", forged.signed === false && forged.slugs.size === 0);
+
+      // fetchRegistryIds unions the federated slugs onto the bundled snapshot.
+      registry._reset();
+      const ids = await registry.fetchRegistryIds({ registryFlags: [flagSpec] });
+      check("fetchRegistryIds unions a verified federated slug", ids.has("acme-bot") && ids.has("acme-helper"));
+
+      // A wrong-key flag source confers NOTHING even though the URL serves a valid (other-key) sig.
+      registry._reset();
+      const wrongKeyFlag = `name=acme,url=https://acme.test/index.json,sig=https://acme.test/forged.sig,key=${fedPubPem.replace(/\n/g, "\\n")}`;
+      const idsWrong = await registry.fetchRegistryIds({ registryFlags: [wrongKeyFlag] });
+      check("forged federated source confers no Mythical", !idsWrong.has("acme-bot"));
+    } finally {
+      global.fetch = origFetch;
+      registry._reset();
+    }
+  }
+
   // 7. Per-file provenance — created_by + signature + remix lineage (DIVE-651).
   // Back-compat: v0.1 files (no provenance) still validate, and verify cleanly
   // reports them as unsigned.
