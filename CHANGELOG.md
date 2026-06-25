@@ -15,6 +15,16 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-06-25 · CLI
+### Added — universal card motion (every tier)
+- Animated cards now carry baseline motion on ALL tiers, not just the top ones:
+  a **live voiceprint** (waveform bars breathe like an audio meter), an **ambient
+  accent-glow breath**, and a **subtle Ken Burns** push-in on the portrait.
+  Common/Rare are no longer static.
+- All three loop seamlessly and affect ONLY the animated render — the static
+  PNG/SVG stays byte-identical. The tier ladder is unchanged (foil sweep from
+  Epic, rainbow holo still Mythical-only).
+
 ## [0.20.0] — 2026-06-25 · CLI
 ### Changed — rarity roll recalibrated (curve v2)
 - Rolled-tier odds rebalanced **Common 60→40, Rare 25→30, Epic 11→20,
