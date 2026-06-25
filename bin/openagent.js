@@ -7,7 +7,7 @@ const { renderCard, renderAnimatedCard, resolveFace, fetchRegistryIds, hasFfmpeg
 const { computeTier, computeBadges, nextRung, rungNeeds, TIER_STYLE } = require("../lib/tier");
 const { registryStatus } = require("../lib/registry");
 const { speak } = require("../lib/speak");
-const { generateKeypair, signPersona, verifyPersona, didKeyFromPublicKey, shortDidKey } = require("../lib/provenance");
+const { generateKeypair, signPersona, verifyPersona, didKeyFromPublicKey, shortDidKey, friendlyId, verifyFriendlyId } = require("../lib/provenance");
 const { flow } = require("../lib/flow");
 const YAML = require("yaml");
 const fs = require("fs");
@@ -58,6 +58,7 @@ ${bold("Usage")}
   openagent speak <persona-file> "<text>" [-o <out.wav>] [--voice <name>]
   openagent keygen [-o <prefix>]
   openagent address <persona-file | pubkey-file> [--json]
+  openagent id <persona-file | pubkey-file> [--handle <h>] [--check <claim>] [--json]
   openagent sign <persona-file> --key <privkey.pem> [--name <n>] [--url <u>] [--derived-from <id[:source]>] [-o <out>]
   openagent verify <persona-file> [--json]
   openagent flow <persona-file> "<scene>" [--json]
@@ -468,6 +469,83 @@ function cmdAddress(args) {
   return 0;
 }
 
+// openagent id <persona | pubkey-file> [--handle h] [--check claim] [--json]
+// Friendly ID = handle·fingerprint (e.g. marcus·k7f2q9): the persona id paired
+// with a short fingerprint derived from the did:key. Memorable + collision-safe
+// + verifiable. --check verifies a claimed friendly id against the key.
+function cmdId(args) {
+  const json = args.includes("--json");
+  let handleOverride = null, check = null;
+  const positional = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--json") continue;
+    else if (a === "--handle") handleOverride = args[++i];
+    else if (a === "--check") check = args[++i];
+    else if (!a.startsWith("-")) positional.push(a);
+  }
+  const file = positional[0];
+  if (!file) {
+    process.stderr.write(red("id: no persona or public-key file given\n\n") + USAGE);
+    return 2;
+  }
+  let raw;
+  try {
+    raw = fs.readFileSync(file, "utf8");
+  } catch (e) {
+    if (json) process.stdout.write(JSON.stringify({ ok: false, error: e.message }, null, 2) + "\n");
+    else process.stderr.write(red(`id: ${e.message}\n`));
+    return 2;
+  }
+  let doc = null;
+  try { doc = YAML.parse(raw); } catch (_) { /* raw key file */ }
+  let key, handle;
+  if (doc && typeof doc === "object" && doc.provenance && doc.provenance.created_by && doc.provenance.created_by.key) {
+    key = doc.provenance.created_by.key;
+    handle = handleOverride || doc.id;
+  } else {
+    key = raw.trim();
+    handle = handleOverride;
+  }
+  let did;
+  try {
+    did = didKeyFromPublicKey(key);
+  } catch (e) {
+    const msg = `${file} has no did:key yet — sign/mint first (render a card, or \`openagent sign\`). ${e.message}`;
+    if (json) process.stdout.write(JSON.stringify({ ok: false, error: msg }, null, 2) + "\n");
+    else process.stderr.write(red(`id: ${msg}\n`));
+    return 1;
+  }
+  if (!handle) {
+    const msg = "no handle — a persona file supplies it via `id`, or pass --handle <name> for a bare key file";
+    if (json) process.stdout.write(JSON.stringify({ ok: false, error: msg }, null, 2) + "\n");
+    else process.stderr.write(red(`id: ${msg}\n`));
+    return 2;
+  }
+
+  if (check != null) {
+    const v = verifyFriendlyId(check, did, handle);
+    if (json) {
+      process.stdout.write(JSON.stringify({ ok: v.ok, claimed: check, handle, did, fingerprint: v.fingerprint, reason: v.reason }, null, 2) + "\n");
+    } else if (v.ok) {
+      process.stdout.write(`${green("✓")} ${bold(check)} ${dim("verified — fingerprint matches the did:key")}\n`);
+    } else {
+      process.stdout.write(`${red("✗")} ${bold(check)} ${dim("— " + v.reason)}\n   ${dim("correct id:")} ${handle}·${v.fingerprint}\n`);
+    }
+    return v.ok ? 0 : 1;
+  }
+
+  const fid = friendlyId(handle, did);
+  if (json) {
+    process.stdout.write(JSON.stringify({ ok: true, id: handle, did, fingerprint: fid.fingerprint, display: fid.display, urlSafe: fid.urlSafe }, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(`${bold(fid.display)}  ${dim("(handle·fingerprint — share this)")}\n`);
+  process.stdout.write(`${dim("url-safe ")}${fid.urlSafe}\n`);
+  process.stdout.write(`${dim("did:key  ")}${did}\n`);
+  return 0;
+}
+
 function cmdSign(args) {
   let keyPath = null,
     out = null,
@@ -709,6 +787,7 @@ async function main(argv) {
   if (cmd === "speak") return cmdSpeak(rest);
   if (cmd === "keygen") return cmdKeygen(rest);
   if (cmd === "address") return cmdAddress(rest);
+  if (cmd === "id") return cmdId(rest);
   if (cmd === "sign") return cmdSign(rest);
   if (cmd === "verify") return cmdVerify(rest);
   if (cmd === "flow") return cmdFlow(rest);

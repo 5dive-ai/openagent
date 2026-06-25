@@ -15,6 +15,18 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-06-25 · CLI
+### Added — `openagent id`: user-friendly handle·fingerprint
+- New `id` command emits a friendly, shareable agent id =
+  `<handle>·<fingerprint>` (e.g. `marcus·yrcyj4`) — the persona id paired with a
+  6-char Crockford-base32 fingerprint DERIVED from the did:key. Memorable,
+  collision-safe across same-named agents, with a url-safe form (`marcus-yrcyj4`).
+- `--check <claim>` verifies a claimed friendly id against the key
+  (anti-impersonation: recomputes the fingerprint from the did:key; rejects a
+  wrong fingerprint OR a mismatched handle). `--json` for both modes.
+- lib: `fingerprintFromDidKey`, `friendlyId`, `verifyFriendlyId` exported from
+  provenance.js for reuse by the gallery (canonical /card URLs + verified badge).
+
 ## [0.21.1] — 2026-06-25 · CLI
 ### Changed — motion intensity laddered to rarity
 - The baseline motion (waveform pulse depth + speed, glow-breath depth, Ken Burns

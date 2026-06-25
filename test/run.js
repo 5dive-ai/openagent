@@ -176,6 +176,25 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
     check("conferral beats a pin (in-registry → Mythical)", pinnedButConferred === "Mythical");
   })();
 
+  // Friendly ID (handle·fingerprint) — derived from the did:key, verifiable.
+  (() => {
+    const did = "did:key:z6MkfxJdF5PhqHcgpKNy9vY6Y9MAzZJ9EqqVywXqFJUa8VaG";
+    const fp = provenance.fingerprintFromDidKey(did);
+    check("fingerprint is 6 lowercase Crockford-base32 chars", /^[0-9a-hjkmnp-tv-z]{6}$/.test(fp));
+    check("fingerprint is deterministic per did:key", provenance.fingerprintFromDidKey(did) === fp);
+    check("different did:key → different fingerprint",
+      provenance.fingerprintFromDidKey("did:key:z6MkOtherKeyAAAA") !== fp);
+    const fid = provenance.friendlyId("marcus", did);
+    check("friendlyId display = handle·fingerprint", fid.display === `marcus·${fp}`);
+    check("friendlyId urlSafe = handle-fingerprint", fid.urlSafe === `marcus-${fp}`);
+    check("verify accepts the correct display form", provenance.verifyFriendlyId(`marcus·${fp}`, did, "marcus").ok);
+    check("verify accepts the url-safe form", provenance.verifyFriendlyId(`marcus-${fp}`, did, "marcus").ok);
+    check("verify accepts a bare fingerprint", provenance.verifyFriendlyId(fp, did).ok);
+    check("verify rejects a wrong fingerprint", !provenance.verifyFriendlyId("marcus·zzzzzz", did, "marcus").ok);
+    check("verify rejects impersonation (right fp, wrong handle)",
+      !provenance.verifyFriendlyId(`notmarcus·${fp}`, did, "marcus").ok);
+  })();
+
   check("completeness is a percentage", r1.completeness > 0 && r1.completeness <= 100);
   check("more-complete persona scores higher",
     computeTier(lilDoc, { didKey: KEY, schemaValid: true }).completeness >
