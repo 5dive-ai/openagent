@@ -4,7 +4,7 @@
 const path = require("path");
 const { validateFile } = require("../lib/validate");
 const { renderCard, renderAnimatedCard, resolveFace, fetchRegistryIds, hasFfmpeg } = require("../lib/card");
-const { computeTier, computeBadges, nextRung, rungNeeds, TIER_STYLE } = require("../lib/tier");
+const { computeTier, computeBadges, nextRung, rungNeeds, completenessChecklist, TIER_STYLE } = require("../lib/tier");
 const { registryStatus } = require("../lib/registry");
 const { speak } = require("../lib/speak");
 const { generateKeypair, signPersona, verifyPersona, didKeyFromPublicKey, shortDidKey, friendlyId, verifyFriendlyId } = require("../lib/provenance");
@@ -75,6 +75,7 @@ ${bold("Usage")}
   openagent id <persona-file | pubkey-file> [--handle <h>] [--check <claim>] [--json]
   openagent sign <persona-file> --key <privkey.pem> [--name <n>] [--url <u>] [--derived-from <id[:source]>] [-o <out>]
   openagent verify <persona-file> [--json]
+  openagent doctor <persona-file> [--json] [--no-registry]
   openagent org init   --url <org> --name <Org> --key <orgpriv.key> [--key-id <id>] [-o openagent.json]
   openagent org attest <persona-file> --key <orgpriv.key> (--url <org> | --did <did:web>) [--key-id <id>] [-o <out>]
   openagent org verify <persona-file> [--json]
@@ -176,6 +177,16 @@ ${bold("verify")}
   prints the author + any remix lineage. Exit 0 = valid signature (or no
   signature present), 1 = a signature that fails to verify (tampered/wrong key).
 
+${bold("doctor")}
+  One end-to-end pre-flight before you share or PR a persona. Rolls every other
+  check into a single punch-list, each line with an actionable fix-it:
+  schema-valid, identity signed (did:key) + signature actually verifies, face.ref
+  reachable (live fetch), rolled rarity tier + Mythical conferral, earned badges,
+  and the completeness surface with the EXACT missing fields named. Exit 0 =
+  healthy (advisory warnings allowed), 1 = a hard defect (invalid schema or a
+  broken signature), 2 = usage/IO error. --json emits the full machine report;
+  --no-registry skips the (network) Mythical-conferral lookup.
+
 ${bold("Examples")}
   openagent validate marcus.persona.yaml
   openagent card marcus.persona.yaml                           # animated card (mp4) by default
@@ -188,6 +199,7 @@ ${bold("Examples")}
   openagent address vera.persona.yaml          # did:key public address
   openagent sign vera.persona.yaml --key ana.key --name "ana" --derived-from marcus
   openagent verify vera.persona.yaml
+  openagent doctor marcus.persona.yaml                         # full pre-flight before sharing/PR
   openagent flow marcus.persona.yaml "at his desk reviewing a pull request, late evening"
 `;
 
@@ -748,6 +760,152 @@ function cmdVerify(args) {
   return 0;
 }
 
+// openagent doctor <persona> — one end-to-end pre-flight before you share/PR a
+// persona. Composes every other check into a single punch-list: schema-valid,
+// identity signed (did:key) + signature actually verifies, face.ref reachable
+// (live fetch), rolled tier + conferred Mythical, earned badges, and the
+// completeness surface with the exact missing fields named. Each line carries
+// an actionable fix-it. Exit 0 = healthy (warnings allowed), 1 = a hard defect
+// (invalid schema or a broken signature), 2 = usage/IO. --json for machines.
+async function cmdDoctor(args) {
+  const json = args.includes("--json");
+  const checkRegistry = !args.includes("--no-registry");
+  const registryFlags = registryFlagsFrom(args);
+  const rest = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--registry") { i++; continue; }
+    rest.push(args[i]);
+  }
+  const file = rest.find((a) => !a.startsWith("-"));
+  if (!file) {
+    process.stderr.write(red("doctor: no persona file given\n\n") + USAGE);
+    return 2;
+  }
+
+  let persona;
+  try {
+    persona = loadPersona(file);
+  } catch (e) {
+    if (json) process.stdout.write(JSON.stringify({ file, ok: false, error: e.message }, null, 2) + "\n");
+    else process.stderr.write(red(`✗ ${file} — could not parse: ${e.message}\n`));
+    return 2;
+  }
+
+  // Gather every signal. Network checks (face fetch, registry) are best-effort.
+  const v = validateFile(file);
+  const ver = verifyPersona(persona);
+  const baseDir = path.dirname(path.resolve(file));
+  const face = await resolveFace(persona && persona.face ? persona.face.ref : null, baseDir);
+  let inRegistry = false;
+  if (checkRegistry) {
+    try { inRegistry = (await fetchRegistryIds({ registryFlags })).has(persona && persona.id); }
+    catch (_) { /* offline / unreachable → not conferred, no crash */ }
+  }
+  const t = computeTier(persona, { faceResolved: face.resolved, inRegistry, schemaValid: v.ok });
+  const badges = computeBadges(persona, { signatureValid: ver.signed ? ver.ok : undefined });
+  const checklist = completenessChecklist(persona);
+  const missing = checklist.filter((c) => !c.present);
+
+  // status ∈ ok | warn | fail. fail is the only thing that fails the exit code.
+  const checks = [];
+
+  // 1. Schema
+  checks.push({
+    id: "schema",
+    status: v.ok ? "ok" : "fail",
+    label: "Schema",
+    detail: v.ok ? "valid against the OpenAgent persona schema" : `${v.errors.length} schema error(s)`,
+    fixes: v.ok ? [] : v.errors,
+  });
+  if ((v.warnings || []).length) {
+    checks.push({ id: "warnings", status: "warn", label: "Warnings",
+      detail: `${v.warnings.length} advisory warning(s)`, fixes: v.warnings });
+  }
+
+  // 2. Identity + signature (did:key)
+  if (!ver.signed) {
+    checks.push({ id: "signed", status: "warn", label: "Identity",
+      detail: "unsigned — valid but unproven, and rarity stays Ungraded",
+      fixes: ["render a card (auto-mints a did:key) or run `openagent sign <file> --key <privkey>`"] });
+  } else if (!ver.ok) {
+    checks.push({ id: "signed", status: "fail", label: "Identity",
+      detail: `signature INVALID — ${ver.reason}`,
+      fixes: ["re-sign after your edits: `openagent sign <file> --key <privkey>` (the content changed since it was signed)"] });
+  } else {
+    checks.push({ id: "signed", status: "ok", label: "Identity",
+      detail: `signed & verified · ${ver.did || "did:key"}`, fixes: [] });
+  }
+
+  // 3. face.ref reachable (authoritative live resolution)
+  const faceRef = persona && persona.face ? persona.face.ref : null;
+  if (!faceRef) {
+    checks.push({ id: "face", status: "warn", label: "Face",
+      detail: "no face.ref — the card falls back to a monogram",
+      fixes: ["add face.ref (a URL or local image path) so the card shows your likeness"] });
+  } else if (face.resolved) {
+    checks.push({ id: "face", status: "ok", label: "Face",
+      detail: `face.ref resolves (${String(faceRef).slice(0, 60)})`, fixes: [] });
+  } else {
+    checks.push({ id: "face", status: "fail", label: "Face",
+      detail: `face.ref does NOT resolve to an image (${String(faceRef).slice(0, 60)})`,
+      fixes: ["fix the path/URL — a local ref must exist on disk; a URL must return an image content-type"] });
+  }
+
+  // 4. Tier (rolled) + Mythical conferral
+  checks.push({ id: "tier", status: t.tier === "Ungraded" ? "warn" : "ok", label: "Tier",
+    detail: t.tier === "Ungraded"
+      ? "Ungraded — sign the persona to roll a permanent rarity"
+      : t.tier === "Mythical"
+      ? "Mythical — conferred by the signed registry"
+      : `${t.tier} — rolled from your did:key (permanent)`,
+    fixes: t.tier === "Ungraded" ? [rungNeeds().ungraded] : [] });
+
+  // 5. Badges (collectibles, orthogonal to tier)
+  checks.push({ id: "badges", status: "ok", label: "Badges",
+    detail: badges.length ? badges.map((b) => b.key).join(", ") : "none yet",
+    fixes: [] });
+
+  // 6. Completeness surface, with the exact missing fields named
+  checks.push({
+    id: "completeness",
+    status: t.completeness >= 80 ? "ok" : t.completeness >= 50 ? "warn" : "warn",
+    label: "Completeness",
+    detail: `${t.completeness}% (${checklist.length - missing.length}/${checklist.length} fields)`,
+    fixes: missing.map((c) => `add ${c.field} — ${c.label}`),
+  });
+
+  const failed = checks.filter((c) => c.status === "fail");
+  const warned = checks.filter((c) => c.status === "warn");
+  const healthy = failed.length === 0;
+
+  if (json) {
+    process.stdout.write(JSON.stringify({
+      file, ok: healthy, id: persona && persona.id, tier: t.tier,
+      completeness: t.completeness, badges: badges.map((b) => b.key),
+      faceResolved: face.resolved, inRegistry, signed: ver.signed, signatureValid: ver.ok,
+      checks,
+    }, null, 2) + "\n");
+    return healthy ? 0 : 1;
+  }
+
+  const sym = (s) => (s === "ok" ? green("✓") : s === "warn" ? yellow("⚠") : red("✗"));
+  const head = healthy
+    ? (warned.length ? `${yellow("⚠ READY (with notes)")}` : `${green("✓ HEALTHY")}`)
+    : `${red("✗ NOT READY")}`;
+  process.stdout.write(`${head} ${dim(path.basename(file))} ${dim(`· ${persona && persona.id || "?"}`)}\n`);
+  for (const c of checks) {
+    process.stdout.write(`  ${sym(c.status)} ${bold(c.label)} ${dim("— " + c.detail)}\n`);
+    for (const fix of c.fixes) {
+      process.stdout.write(`        ${dim("↳ " + fix)}\n`);
+    }
+  }
+  const tally = `${green(checks.filter((c) => c.status === "ok").length + " ok")}` +
+    (warned.length ? ` · ${yellow(warned.length + " warn")}` : "") +
+    (failed.length ? ` · ${red(failed.length + " fail")}` : "");
+  process.stdout.write(`  ${dim("—")} ${tally}\n`);
+  return healthy ? 0 : 1;
+}
+
 // openagent org <init|attest|verify> ...
 //   init   — build the /.well-known/openagent.json an org publishes (org key in)
 //   attest — mint an org.verification block vouching a persona's did:key (org key)
@@ -1068,6 +1226,7 @@ async function main(argv) {
   if (cmd === "id") return cmdId(rest);
   if (cmd === "sign") return cmdSign(rest);
   if (cmd === "verify") return cmdVerify(rest);
+  if (cmd === "doctor") return cmdDoctor(rest);
   if (cmd === "org") return cmdOrg(rest);
   if (cmd === "flow") return cmdFlow(rest);
 

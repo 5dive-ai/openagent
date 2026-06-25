@@ -625,6 +625,19 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
     voiceRules: ["terse"], voiceSample: "done.",
   })).ok === true);
 
+  // 7b. completenessChecklist — the labeled punch-list `doctor` surfaces.
+  const { completenessChecklist } = require("../lib/tier");
+  const marcus = load(path.join(examples, "marcus.persona.yaml"));
+  const cl = completenessChecklist(marcus);
+  check("completenessChecklist returns labeled entries", Array.isArray(cl) && cl.length === 16 &&
+    cl.every((c) => c.key && c.label && c.field && typeof c.present === "boolean"));
+  check("completenessChecklist marks present + missing fields", cl.find((c) => c.field === "id").present === true &&
+    cl.find((c) => c.field === "voice.audio.id").present === false);
+  // computeTier's percent must agree with the checklist fraction (no drift).
+  const fromList = Math.round((cl.filter((c) => c.present).length / cl.length) * 100);
+  check("completeness percent matches checklist fraction",
+    computeTier(marcus, { schemaValid: true }).completeness === fromList);
+
   // 8. Conformance suite — run the portable manifest against this impl.
   console.log("\n-- conformance suite --");
   failures += runConformance();

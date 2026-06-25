@@ -13,6 +13,22 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.29.0] — `doctor` end-to-end pre-flight (DIVE-691)
+
+- **CLI — `openagent doctor <persona>`.** One command that rolls every other
+  check into a single pass/fail punch-list before you share or PR a persona:
+  schema-valid, identity signed (did:key) + signature actually verifies, `face.ref`
+  reachable (live fetch), rolled rarity tier + Mythical conferral, earned badges,
+  and the completeness surface with the **exact missing fields named**. Every line
+  carries an actionable fix-it (e.g. "re-sign after your edits", "add face.full —
+  full-body render"). Exit `0` = healthy (advisory warnings allowed), `1` = a hard
+  defect (invalid schema or a broken signature), `2` = usage/IO. `--json` emits the
+  full machine report; `--no-registry` skips the network Mythical-conferral lookup.
+- **Lib — `completenessChecklist(persona)`.** The completeness percent is now also
+  exposed as a labeled `{ key, label, field, present }[]`, so `doctor` (and any
+  consumer) can turn the opaque number into a named to-do list. `computeTier`'s
+  percent is computed from this same list — no drift.
+
 ## [0.28.0] — vendor-neutral image + video providers (DIVE-690)
 
 - **Spec (v0.2, additive) — `face.recipe.provider`.** The image-gen recipe now
