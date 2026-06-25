@@ -32,8 +32,11 @@ jobs:
       - name: Validate all *.persona.yaml in the repo
         shell: bash
         run: |
-          shopt -s globstar nullglob
-          files=( **/*.persona.yaml **/*.persona.json )
+          # Exclude node_modules and test/fixtures — the latter holds
+          # deliberately-invalid personas that must NOT pass validate.
+          mapfile -t files < <(find . \
+            \( -path ./node_modules -o -path ./test/fixtures \) -prune -o \
+            \( -name '*.persona.yaml' -o -name '*.persona.json' \) -print)
           if [ ${#files[@]} -eq 0 ]; then
             echo "no persona files found"; exit 0
           fi

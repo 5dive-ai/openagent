@@ -29,8 +29,10 @@ runs:
           # shellcheck disable=SC2206
           files=( ${OA_FILES} )
         else
-          shopt -s globstar nullglob
-          files=( **/*.persona.yaml **/*.persona.json )
+          # Default: every persona file in the repo, minus vendored/VCS dirs.
+          mapfile -t files < <(find . \
+            \( -path ./node_modules -o -path ./.git \) -prune -o \
+            \( -name '*.persona.yaml' -o -name '*.persona.json' \) -print)
         fi
         if [ ${#files[@]} -eq 0 ]; then
           echo "openagent: no persona files to validate"; exit 0
