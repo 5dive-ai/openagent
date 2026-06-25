@@ -61,6 +61,9 @@ ${bold("Usage")}
   openagent id <persona-file | pubkey-file> [--handle <h>] [--check <claim>] [--json]
   openagent sign <persona-file> --key <privkey.pem> [--name <n>] [--url <u>] [--derived-from <id[:source]>] [-o <out>]
   openagent verify <persona-file> [--json]
+  openagent org init   --url <org> --name <Org> --key <orgpriv.key> [--key-id <id>] [-o openagent.json]
+  openagent org attest <persona-file> --key <orgpriv.key> (--url <org> | --did <did:web>) [--key-id <id>] [-o <out>]
+  openagent org verify <persona-file> [--json]
   openagent flow <persona-file> "<scene>" [--json]
   openagent --help
   openagent --version
@@ -294,7 +297,23 @@ async function cmdCard(args) {
     return 0;
   }
 
-  const res = await renderCard(file, out, { checkRegistry });
+  // Best-effort did:web org verification for the verified-ORG ✓ on the card.
+  // Gated on the same network flag as the registry check; failures stay silent
+  // (the card just renders without the badge) so offline/down domains never
+  // block a render.
+  let orgVerified = false;
+  if (checkRegistry) {
+    try {
+      const org = require("../lib/org");
+      const persona = loadPersona(file);
+      if (persona.org && persona.org.verification) {
+        orgVerified = (await org.verifyOrgAffiliation(persona, { resolve: org.fetchResolver })).verified === true;
+      }
+    } catch (_) {
+      /* offline / unreachable domain → no badge */
+    }
+  }
+  const res = await renderCard(file, out, { checkRegistry, orgVerified });
   if (!res.ok) {
     process.stderr.write(red(`card: ${res.error}\n`));
     return 2;
@@ -668,6 +687,157 @@ function cmdVerify(args) {
   return 0;
 }
 
+// openagent org <init|attest|verify> ...
+//   init   — build the /.well-known/openagent.json an org publishes (org key in)
+//   attest — mint an org.verification block vouching a persona's did:key (org key)
+//   verify — resolve the org's did:web and check a persona's org.verification
+async function cmdOrg(args) {
+  const org = require("../lib/org");
+  const sub = args[0];
+  const rest = args.slice(1);
+
+  if (sub === "init") {
+    let url = null, name = null, keyPath = null, keyId = null, out = null;
+    for (let i = 0; i < rest.length; i++) {
+      const a = rest[i];
+      if (a === "--url") url = rest[++i];
+      else if (a === "--name") name = rest[++i];
+      else if (a === "--key") keyPath = rest[++i];
+      else if (a === "--key-id") keyId = rest[++i];
+      else if (a === "-o" || a === "--out") out = rest[++i];
+    }
+    if (!url || !name || !keyPath) {
+      process.stderr.write(red("org init: --url <https://org.com> --name <Org> --key <orgpriv.key> required\n"));
+      return 2;
+    }
+    let doc;
+    try {
+      const privateKey = fs.readFileSync(keyPath, "utf8");
+      doc = org.buildOrgDoc({ url, name, privateKey, keyId });
+    } catch (e) {
+      process.stderr.write(red(`org init: ${e.message}\n`));
+      return 2;
+    }
+    const json = JSON.stringify(doc, null, 2) + "\n";
+    if (out) {
+      fs.writeFileSync(out, json);
+      process.stdout.write(
+        `${green("✓ ORG DOC")} ${out} ${dim(`· ${doc.did}`)}\n` +
+          `          ${dim("publish at")} ${org.wellKnownUrlForDid(doc.did)}\n`
+      );
+    } else {
+      process.stdout.write(json);
+      process.stdout.write(`${dim("→ publish this at " + org.wellKnownUrlForDid(doc.did))}\n`);
+    }
+    return 0;
+  }
+
+  if (sub === "attest") {
+    let keyPath = null, url = null, did = null, keyId = null, agent = null, out = null, issuedAt = null;
+    const positional = [];
+    for (let i = 0; i < rest.length; i++) {
+      const a = rest[i];
+      if (a === "--key") keyPath = rest[++i];
+      else if (a === "--url") url = rest[++i];
+      else if (a === "--did") did = rest[++i];
+      else if (a === "--key-id") keyId = rest[++i];
+      else if (a === "--agent") agent = rest[++i];
+      else if (a === "--issued-at") issuedAt = rest[++i];
+      else if (a === "-o" || a === "--out") out = rest[++i];
+      else positional.push(a);
+    }
+    const file = positional[0];
+    if (!file || !keyPath || (!url && !did)) {
+      process.stderr.write(red("org attest <persona> --key <orgpriv.key> (--url <org> | --did <did:web>) [--key-id id] [-o out]\n"));
+      return 2;
+    }
+    let persona, orgPrivateKey;
+    try {
+      persona = loadPersona(file);
+      orgPrivateKey = fs.readFileSync(keyPath, "utf8");
+    } catch (e) {
+      process.stderr.write(red(`org attest: ${e.message}\n`));
+      return 2;
+    }
+    const agentDid = agent || org.agentDidFromPersona(persona);
+    if (!agentDid) {
+      process.stderr.write(
+        red("org attest: persona has no identity to vouch for.\n") +
+          dim("  Give it one first (keygen + sign), or pass --agent <did:key>.\n")
+      );
+      return 2;
+    }
+    let block;
+    try {
+      block = org.signOrgAttestation(orgPrivateKey, { agentDid, orgUrl: url, orgDid: did, keyId, issuedAt });
+    } catch (e) {
+      process.stderr.write(red(`org attest: ${e.message}\n`));
+      return 2;
+    }
+    const alreadySigned = !!(persona.provenance && persona.provenance.signature);
+    persona.org = persona.org && typeof persona.org === "object" ? persona.org : { name: block.did };
+    persona.org.verification = block;
+    const recheck = require("../lib/validate").validateDoc(persona);
+    if (!recheck.ok) {
+      process.stdout.write(`${red("✗")} attested document no longer validates:\n`);
+      for (const err of recheck.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
+      return 1;
+    }
+    const target = out || file;
+    fs.writeFileSync(target, YAML.stringify(persona));
+    process.stdout.write(`${green("✓ ATTESTED")} ${target} ${dim(`· ${block.did} vouches ${agentDid}`)}\n`);
+    if (alreadySigned) {
+      process.stdout.write(
+        `  ${yellow("⚠")} ${dim("this persona was already signed — its provenance signature is now stale.")}\n` +
+          `     ${dim("Re-sign as the agent: openagent sign " + target + " --key <agent.key>")}\n`
+      );
+    }
+    return 0;
+  }
+
+  if (sub === "verify") {
+    const json = rest.includes("--json");
+    const file = rest.find((a) => !a.startsWith("-"));
+    if (!file) {
+      process.stderr.write(red("org verify: no persona file given\n"));
+      return 2;
+    }
+    let persona;
+    try {
+      persona = loadPersona(file);
+    } catch (e) {
+      if (json) process.stdout.write(JSON.stringify({ verified: false, error: e.message }, null, 2) + "\n");
+      else process.stderr.write(red(`org verify: ${e.message}\n`));
+      return 2;
+    }
+    const r = await org.verifyOrgAffiliation(persona, { resolve: org.fetchResolver });
+    if (json) {
+      process.stdout.write(JSON.stringify({ file, ...r }, null, 2) + "\n");
+      return r.verified ? 0 : 1;
+    }
+    if (!r.verified) {
+      const declared = persona.org && persona.org.name ? ` ${dim("(org.name: " + persona.org.name + ", self-declared only)")}` : "";
+      process.stdout.write(`${dim("○ UNVERIFIED ORG")} ${file}${declared} ${dim("— " + r.reason)}\n`);
+      return 1;
+    }
+    process.stdout.write(`${green("✓ VERIFIED ORG")} ${file} ${dim(`· ${r.org.name} (${r.org.did})`)}\n`);
+    process.stdout.write(`  ${dim("vouches")} ${r.agent}${r.keyId ? dim(` · via key ${r.keyId}`) : ""}\n`);
+    if (r.nameMatches === false) {
+      process.stdout.write(`  ${yellow("⚠")} ${dim(`persona org.name "${persona.org.name}" ≠ verified "${r.org.name}" — display the verified name`)}\n`);
+    }
+    return 0;
+  }
+
+  process.stderr.write(
+    red("org: unknown subcommand" + (sub ? ` '${sub}'` : "")) +
+      "\n" +
+      dim("  openagent org init   --url <org> --name <Org> --key <orgpriv.key> [--key-id id] [-o openagent.json]\n") +
+      dim("  openagent org attest <persona> --key <orgpriv.key> (--url <org> | --did <did:web>) [--key-id id] [-o out]\n") +
+      dim("  openagent org verify <persona> [--json]\n")
+  );
+  return 2;
+}
+
 function cmdValidate(files) {
   if (files.length === 0) {
     process.stderr.write(red("validate: no persona file given\n\n") + USAGE);
@@ -800,6 +970,7 @@ async function main(argv) {
   if (cmd === "id") return cmdId(rest);
   if (cmd === "sign") return cmdSign(rest);
   if (cmd === "verify") return cmdVerify(rest);
+  if (cmd === "org") return cmdOrg(rest);
   if (cmd === "flow") return cmdFlow(rest);
 
   process.stderr.write(red(`unknown command: ${cmd}\n\n`) + USAGE);

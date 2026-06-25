@@ -15,6 +15,31 @@ Entries note which line moved.
 
 ## [Unreleased]
 
+## [0.25.0] — 2026-06-25 · spec 0.2 + CLI · did:web org verification
+
+**Verified ORG badge.** `org.name` was a free-text claim — anyone could brand a
+card with any org. v0.2 adds optional `org.verification`: a **did:web**
+attestation in which an org (which controls its domain's
+`/.well-known/openagent.json`) signs a binding from an agent's `did:key` to the
+org's `did:web`. A verifier resolves the domain, checks the signature against
+the published org key, and checks the attestation names the persona's *own*
+`did:key`. All three must hold — so only a domain-controlling org can mint a
+passing attestation, and only for the one identity it vouches for. Kills org
+impersonation; the trust anchor is the domain (like a TLS cert), never a key
+embedded in the file. Additive — does **not** affect rarity.
+
+- **Spec (v0.2):** new optional `org.verification { did, agent, key_id?,
+  issued_at?, signature }`. A v0.1/older v0.2 file stays valid.
+- **CLI:** new `openagent org` command group — `org init` (build the well-known
+  doc an org publishes), `org attest <persona>` (org mints + embeds the
+  attestation), `org verify <persona>` (resolve did:web and verify; `--json`).
+- **Card:** the footer org name earns a green `✓` when — and only when — the
+  caller proves the attestation (`lib/org.verifyOrgAffiliation`). `openagent
+  card` does a best-effort verify (gated on the network flag); the gallery
+  passes the same `orgVerified` signal. A forged block never self-awards the ✓.
+- **lib:** new `lib/org.js` (did:web ↔ URL, well-known doc build, attestation
+  sign/verify with an injected resolver for offline testing).
+
 ## [0.24.0] — 2026-06-25 · spec 0.2 + CLI
 ### Added — vendor-neutral voice provider
 - Optional `voice.audio.provider` (default `google-gemini`) so a persona can name

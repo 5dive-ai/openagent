@@ -492,6 +492,60 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("signed card no longer shows the raw did tail", !cardWithDid.includes(provenance.shortDidKey(opsVerdict.did)));
   check("unsigned persona's card has no friendly-id fingerprint", !buildSvg(marcusDoc, null, "rare").includes(`${marcusDoc.id}·`));
 
+  // 7b. did:web org verification (lib/org) — fully offline via injected resolver.
+  console.log("\n-- org did:web verification --");
+  const org = require("../lib/org");
+
+  // did:web <-> well-known URL round trips, incl. paths.
+  check("didWebFromUrl: domain", org.didWebFromUrl("https://5dive.com") === "did:web:5dive.com");
+  check("didWebFromUrl: path", org.didWebFromUrl("https://5dive.com/teams/research") === "did:web:5dive.com:teams:research");
+  check("wellKnownUrlForDid: domain → /.well-known/", org.wellKnownUrlForDid("did:web:5dive.com") === "https://5dive.com/.well-known/openagent.json");
+  check("wellKnownUrlForDid: path → path/openagent.json", org.wellKnownUrlForDid("did:web:5dive.com:teams:research") === "https://5dive.com/teams/research/openagent.json");
+
+  // Org keypair + its published well-known doc.
+  const orgKp = provenance.generateKeypair();
+  const orgDoc = org.buildOrgDoc({ url: "https://5dive.com", name: "5dive", privateKey: orgKp.privateKey, keyId: "org-2026" });
+  check("buildOrgDoc carries did + key", orgDoc.did === "did:web:5dive.com" && orgDoc.keys[0].id === "org-2026" && /BEGIN PUBLIC KEY/.test(orgDoc.keys[0].key));
+
+  // A resolver that serves our in-memory org doc — no network.
+  const resolve = async (url) => {
+    if (url === "https://5dive.com/.well-known/openagent.json") return orgDoc;
+    throw new Error("404");
+  };
+
+  // Agent persona with a real identity (provenance key), then org-attested.
+  const agentKp = provenance.generateKeypair();
+  const agentBase = { ...marcusDoc, id: "memberbot", org: { name: "5dive" } };
+  const agentSigned = provenance.signPersona(agentBase, { privateKey: agentKp.privateKey, name: "tester" });
+  const agentDid = provenance.didKeyFromPublicKey(agentKp.publicKey);
+  const block = org.signOrgAttestation(orgKp.privateKey, { agentDid, orgUrl: "https://5dive.com", keyId: "org-2026" });
+  check("signOrgAttestation binds the agent did:key", block.agent === agentDid && block.did === "did:web:5dive.com");
+  agentSigned.org.verification = block;
+
+  const good = await org.verifyOrgAffiliation(agentSigned, { resolve });
+  check("verifyOrgAffiliation: valid attestation verifies", good.verified === true && good.org.name === "5dive" && good.keyId === "org-2026");
+
+  // Tamper 1: attestation bound to a DIFFERENT agent did:key is rejected.
+  const otherDid = provenance.didKeyFromPublicKey(provenance.generateKeypair().publicKey);
+  const wrongAgent = { ...agentSigned, org: { name: "5dive", verification: org.signOrgAttestation(orgKp.privateKey, { agentDid: otherDid, orgUrl: "https://5dive.com" }) } };
+  check("verify rejects attestation for a different agent", (await org.verifyOrgAffiliation(wrongAgent, { resolve })).verified === false);
+
+  // Tamper 2: signature by a key NOT published at the domain is rejected.
+  const forgerKp = provenance.generateKeypair();
+  const forged = { ...agentSigned, org: { name: "5dive", verification: org.signOrgAttestation(forgerKp.privateKey, { agentDid, orgUrl: "https://5dive.com", keyId: "org-2026" }) } };
+  check("verify rejects a forged (unpublished-key) signature", (await org.verifyOrgAffiliation(forged, { resolve })).verified === false);
+
+  // Tamper 3: persona with no provenance identity can't be org-verified.
+  const noId = { ...agentBase, org: { name: "5dive", verification: block } };
+  delete noId.provenance;
+  check("verify rejects persona with no identity to bind", (await org.verifyOrgAffiliation(noId, { resolve })).verified === false);
+
+  // Card: the verified-ORG ✓ appears only when orgVerified is passed.
+  check("card shows ✓ only when org-verified", buildSvg(agentSigned, null, "rare", undefined, undefined, { orgVerified: true }).includes("#3DD68C") && !buildSvg(agentSigned, null, "rare").includes("#3DD68C"));
+
+  // Attested persona still validates against the schema.
+  check("attested persona still schema-valid", validate(agentSigned).ok === true);
+
   // 8. Conformance suite — run the portable manifest against this impl.
   console.log("\n-- conformance suite --");
   failures += runConformance();

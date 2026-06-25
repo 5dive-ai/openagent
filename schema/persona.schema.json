@@ -17,7 +17,20 @@
       "additionalProperties": false,
       "properties": {
         "name": { "type": "string", "description": "display + filter key for the affiliation, e.g. '5dive'." },
-        "url": { "type": "string", "description": "the org's home page (optional; future verification anchor)." }
+        "url": { "type": "string", "description": "the org's home page (optional). Also the did:web verification anchor: https://<domain>/.well-known/openagent.json must publish the org's key for `verification` to pass." },
+        "verification": {
+          "type": "object",
+          "description": "optional did:web org attestation that turns org.name from a self-claim into a VERIFIED ORG badge. The org (which controls its domain's /.well-known/openagent.json) signs a binding from this agent's did:key to the org's did:web. A verifier resolves the domain, checks this signature against the published org key, and checks `agent` equals the persona's own did:key. Does NOT affect rarity. See lib/org.js.",
+          "required": ["did", "agent", "signature"],
+          "additionalProperties": false,
+          "properties": {
+            "did": { "type": "string", "description": "the org's did:web, e.g. 'did:web:5dive.com' — resolves to https://5dive.com/.well-known/openagent.json." },
+            "agent": { "type": "string", "description": "the agent did:key this attestation vouches for; must equal the persona's provenance.created_by.key did:key." },
+            "key_id": { "type": "string", "description": "optional id of the signing key in the org's well-known doc (rotation-safe: only that key may have signed)." },
+            "issued_at": { "type": "string", "description": "optional ISO8601 timestamp the org issued this attestation." },
+            "signature": { "type": "string", "description": "base64 ed25519 signature by the org key over the canonical attestation { did, agent, issued_at }." }
+          }
+        }
       }
     },
     "behavior": { "type": "string" },

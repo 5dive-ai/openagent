@@ -11,7 +11,7 @@ A persona is a single YAML (or JSON) document describing one agent's identity. A
 | `id` | ✓ | string | stable slug, `^[a-z0-9-]+$`. Never changes once published. |
 | `name` | ✓ | string | display name. |
 | `role` | ✓ | string | title / function. |
-| `org` | – | object | optional (v0.2); affiliation — `name` (req) + optional `url`. Self-declared label for grouping/filtering (e.g. all `org.name == "5dive"`). Does not affect rarity. |
+| `org` | – | object | optional (v0.2); affiliation — `name` (req) + optional `url` + optional `verification` (did:web). Self-declared label for grouping/filtering (e.g. all `org.name == "5dive"`); `verification` upgrades it to a proven badge. Does not affect rarity. |
 | `face` | ✓ | object | the visual anchor. |
 | `voice` | ✓ | object | `audio` and/or `written`. At least one required. |
 | `behavior` | ✓ | string | one line of character. |
@@ -107,6 +107,36 @@ This address is the agent's stable identity anchor:
 - **it seeds the rarity roll** — rarity is a deterministic function of the did:key (see the reference runtime), so an agent's tier is bound to its *identity*, not its file contents, and can't be farmed by editing the file.
 
 `openagent address <file>` prints the did:key for a persona's `created_by.key`; `openagent keygen` prints it for a freshly generated identity.
+
+### `org.verification` — did:web org affiliation (v0.2, optional)
+
+`provenance` proves *who an agent is*; it says nothing about *who it works for*. `org.name` alone is a free-text claim — anyone can stamp `5dive` on their card (that's exactly why validators warn on leftover placeholder org names). `org.verification` closes that gap with a **did:web** attestation, turning `org.name` from a self-claim into a **verified ORG badge**.
+
+An org proves control of its domain by publishing its public key at `https://<domain>/.well-known/openagent.json` — its did:web document:
+
+```json
+{
+  "openagent_org": "0.1",
+  "did": "did:web:5dive.com",
+  "name": "5dive",
+  "url": "https://5dive.com",
+  "keys": [ { "id": "org-2026", "type": "Ed25519", "key": "-----BEGIN PUBLIC KEY-----…" } ]
+}
+```
+
+To vouch for an agent, the org signs a tiny attestation binding the agent's `did:key` to the org's `did:web`, and the agent embeds it under `org.verification`:
+
+| field | req | meaning |
+| --- | --- | --- |
+| `did` | ✓ | the org's `did:web`, e.g. `did:web:5dive.com` → `https://5dive.com/.well-known/openagent.json`. |
+| `agent` | ✓ | the agent `did:key` this vouches for; must equal the persona's own `provenance.created_by.key` did:key. |
+| `key_id` | – | id of the signing key in the org doc (rotation-safe: only that key may have signed). |
+| `issued_at` | – | ISO8601 issue time. |
+| `signature` | ✓ | base64 ed25519 signature by the org key over the canonical `{ did, agent, issued_at }`. |
+
+**Verifying** (`openagent org verify`, or `lib/org.verifyOrgAffiliation`): resolve `did → well-known URL`, fetch the org doc, and require **all three** to hold — (1) the signature checks against a *published* org key, (2) the attestation's `agent` equals the persona's *own* did:key, (3) the org doc's `did` matches. Only a party that controls the domain (publishes the file) **and** holds the org private key can mint a passing attestation, and it passes for exactly the one identity it names. The trust anchor is the **domain**, like a TLS cert or a did:web DID — the org key is *never* embedded in the persona (that would let a forger ship their own key). It does **not** affect rarity.
+
+**Authoring flow.** The org mints the block (`openagent org attest <persona> --key <org.key> --url <org>`); the agent then **(re-)signs** its persona so `provenance` covers the new block too. Because the org signature already binds the agent's did:key cryptographically, verification is independent of the persona's own provenance signature — but re-signing keeps the whole file self-consistent.
 
 ### `ext` (v0.2, optional)
 
