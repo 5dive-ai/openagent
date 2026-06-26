@@ -196,6 +196,20 @@ ${bold("doctor")}
   broken signature), 2 = usage/IO error. --json emits the full machine report;
   --no-registry skips the (network) Mythical-conferral lookup.
 
+${bold("handshake")}
+  Prove who you are to another agent, live (A2A). present → your did:key + public
+  key (+ optional --handle/--url to resolve against a signed registry); challenge →
+  a fresh nonce; respond <nonce> → sign it with your keystore key; verify
+  --presentation <file> --nonce --signature → checks the did derives from the key
+  AND the signature is live. Exit 0 = key ownership proven, 1 = not. JSON in/out.
+
+${bold("receipt")}
+  Co-signed work receipts — the verifiable edge between two agents. sign --task
+  --result --to <did> [--at] → a receipt from you, signed once; cosign <file> → add
+  your signature to a partial; verify <file> → both sigs valid over the body (exit
+  0/1); history <file.jsonl> → your earned ledger (verified receipts, distinct
+  counterparties). No chain, no token: two signatures = both attest it happened.
+
 ${bold("Examples")}
   openagent validate marcus.persona.yaml
   openagent card marcus.persona.yaml                           # animated card (mp4) by default
@@ -211,6 +225,8 @@ ${bold("Examples")}
   openagent verify vera.persona.yaml
   openagent doctor marcus.persona.yaml                         # full pre-flight before sharing/PR
   openagent flow marcus.persona.yaml "at his desk reviewing a pull request, late evening"
+  openagent handshake present > me.json                        # A2A: prove who you are, live
+  openagent receipt sign --task "build login fix" --result "PR #214 merged" --to did:key:z6Mk…
 `;
 
 function loadPersona(file) {
@@ -1275,8 +1291,154 @@ async function main(argv) {
   if (cmd === "doctor") return cmdDoctor(rest);
   if (cmd === "org") return cmdOrg(rest);
   if (cmd === "flow") return cmdFlow(rest);
+  if (cmd === "handshake") return cmdHandshake(rest);
+  if (cmd === "receipt") return cmdReceipt(rest);
 
   process.stderr.write(red(`unknown command: ${cmd}\n\n`) + USAGE);
+  return 2;
+}
+
+// openagent handshake <present|challenge|respond|verify> — A2A liveness proof
+// (DIVE-730). Scriptable JSON in/out; identity loaded from the keystore so the
+// caller never handles a key. Pairs with the signed registry for the official
+// identity; this proves the peer holds the private half RIGHT NOW.
+function cmdHandshake(args) {
+  const hs = require("../lib/handshake");
+  const sub = args[0];
+  const rest = args.slice(1);
+  const flag = (n) => {
+    const i = rest.indexOf(n);
+    return i >= 0 ? rest[i + 1] : null;
+  };
+  const emit = (o) => process.stdout.write(JSON.stringify(o, null, 2) + "\n");
+
+  if (sub === "present") {
+    const kp = loadOrCreateAgentKey();
+    emit(hs.present({ privateKey: kp.privateKey, handle: flag("--handle"), cardUrl: flag("--url") }));
+    return 0;
+  }
+  if (sub === "challenge") {
+    emit({ nonce: hs.challenge() });
+    return 0;
+  }
+  if (sub === "respond") {
+    const nonce = rest.find((a) => !a.startsWith("-")) || flag("--nonce");
+    if (!nonce) {
+      process.stderr.write(red("handshake respond: a nonce is required\n"));
+      return 2;
+    }
+    const kp = loadOrCreateAgentKey();
+    emit({ did: kp.did, signature: hs.respond(nonce, kp.privateKey) });
+    return 0;
+  }
+  if (sub === "verify") {
+    const presF = flag("--presentation");
+    if (!presF) {
+      process.stderr.write(red("handshake verify: --presentation <file> required\n"));
+      return 2;
+    }
+    let presentation;
+    try {
+      presentation = JSON.parse(fs.readFileSync(presF, "utf8"));
+    } catch (e) {
+      process.stderr.write(red(`handshake verify: ${e.message}\n`));
+      return 2;
+    }
+    const r = hs.verifyResponse({ presentation, nonce: flag("--nonce"), signature: flag("--signature") });
+    emit(r);
+    return r.ok ? 0 : 1;
+  }
+  process.stderr.write(red(`handshake: unknown subcommand${sub ? ` '${sub}'` : ""} (present|challenge|respond|verify)\n`));
+  return 2;
+}
+
+// openagent receipt <sign|cosign|verify|history> — co-signed work receipts
+// (DIVE-730). The verifiable edge between two agents: two ed25519 signatures
+// over one canonical body. No chain, no token — both parties just attest the
+// work happened. Identity loaded from the keystore.
+function cmdReceipt(args) {
+  const rc = require("../lib/receipts");
+  const sub = args[0];
+  const rest = args.slice(1);
+  const flag = (n) => {
+    const i = rest.indexOf(n);
+    return i >= 0 ? rest[i + 1] : null;
+  };
+  const emit = (o) => process.stdout.write(JSON.stringify(o, null, 2) + "\n");
+  const firstFile = () => rest.find((a) => !a.startsWith("-"));
+
+  if (sub === "sign") {
+    const task = flag("--task");
+    const result = flag("--result");
+    const to = flag("--to");
+    if (!task || !result || !to) {
+      process.stderr.write(red("receipt sign: --task, --result and --to <did> are required\n"));
+      return 2;
+    }
+    const kp = loadOrCreateAgentKey();
+    const receipt = rc.buildReceipt({
+      taskHash: rc.hash(task),
+      resultHash: rc.hash(result),
+      fromDid: flag("--from") || kp.did,
+      toDid: to,
+      at: flag("--at") || new Date().toISOString(),
+    });
+    emit({ receipt, sigs: [rc.sign(receipt, kp.privateKey)] });
+    return 0;
+  }
+  if (sub === "cosign") {
+    const f = firstFile();
+    if (!f) {
+      process.stderr.write(red("receipt cosign: a <partial-receipt-file> is required\n"));
+      return 2;
+    }
+    let co;
+    try {
+      co = JSON.parse(fs.readFileSync(f, "utf8"));
+    } catch (e) {
+      process.stderr.write(red(`receipt cosign: ${e.message}\n`));
+      return 2;
+    }
+    const kp = loadOrCreateAgentKey();
+    co.sigs = [...(co.sigs || []), rc.sign(co.receipt, kp.privateKey)];
+    emit(co);
+    return 0;
+  }
+  if (sub === "verify") {
+    const f = firstFile();
+    if (!f) {
+      process.stderr.write(red("receipt verify: a <receipt-file> is required\n"));
+      return 2;
+    }
+    let co;
+    try {
+      co = JSON.parse(fs.readFileSync(f, "utf8"));
+    } catch (e) {
+      process.stderr.write(red(`receipt verify: ${e.message}\n`));
+      return 2;
+    }
+    const r = rc.verify(co, { requireBoth: !rest.includes("--one-sided-ok") });
+    emit(r);
+    return r.ok ? 0 : 1;
+  }
+  if (sub === "history") {
+    const f = firstFile();
+    if (!f) {
+      process.stderr.write(red("receipt history: a <history.jsonl> file is required\n"));
+      return 2;
+    }
+    let lines;
+    try {
+      lines = fs.readFileSync(f, "utf8").split("\n");
+    } catch (e) {
+      process.stderr.write(red(`receipt history: ${e.message}\n`));
+      return 2;
+    }
+    const self = flag("--self") || (loadAgentKey() || {}).did || null;
+    emit(rc.verifyHistory(lines, self));
+    return 0;
+  }
+  process.stderr.write(red(`receipt: unknown subcommand${sub ? ` '${sub}'` : ""} (sign|cosign|verify|history)\n`));
   return 2;
 }
 
