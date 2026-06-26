@@ -740,7 +740,7 @@ function cmdSign(args) {
       privateKey = fs.readFileSync(keyPath, "utf8");
       keySrc = keyPath;
     } else {
-      const kp = loadOrCreateAgentKey();
+      const kp = agentKeyOrExit();
       privateKey = kp.privateKey;
       keySrc = kp.path + (kp.created ? " (new agent key)" : "");
     }
@@ -1298,6 +1298,22 @@ async function main(argv) {
   return 2;
 }
 
+// Load (or first-time mint) this agent's keystore identity, or exit cleanly.
+// The create-path verbs need a writable keystore; on a read-only $HOME / EACCES
+// / unset HOME (common in headless systemd units — the fleet case) we want a
+// clear one-liner, not a raw stack from main().catch.
+function agentKeyOrExit() {
+  try {
+    return loadOrCreateAgentKey();
+  } catch (e) {
+    process.stderr.write(
+      red(`cannot write keystore at ${agentKeyPath()}: ${e.message}\n`) +
+        dim("  fix the dir's perms, or set OPENAGENT_HOME to a writable directory\n"),
+    );
+    process.exit(2);
+  }
+}
+
 // openagent handshake <present|challenge|respond|verify> — A2A liveness proof
 // (DIVE-730). Scriptable JSON in/out; identity loaded from the keystore so the
 // caller never handles a key. Pairs with the signed registry for the official
@@ -1308,12 +1324,14 @@ function cmdHandshake(args) {
   const rest = args.slice(1);
   const flag = (n) => {
     const i = rest.indexOf(n);
-    return i >= 0 ? rest[i + 1] : null;
+    const v = i >= 0 ? rest[i + 1] : null;
+    // guard `--task --result x` → task is missing, not "--result"
+    return v && !String(v).startsWith("--") ? v : null;
   };
   const emit = (o) => process.stdout.write(JSON.stringify(o, null, 2) + "\n");
 
   if (sub === "present") {
-    const kp = loadOrCreateAgentKey();
+    const kp = agentKeyOrExit();
     emit(hs.present({ privateKey: kp.privateKey, handle: flag("--handle"), cardUrl: flag("--url") }));
     return 0;
   }
@@ -1327,7 +1345,7 @@ function cmdHandshake(args) {
       process.stderr.write(red("handshake respond: a nonce is required\n"));
       return 2;
     }
-    const kp = loadOrCreateAgentKey();
+    const kp = agentKeyOrExit();
     emit({ did: kp.did, signature: hs.respond(nonce, kp.privateKey) });
     return 0;
   }
@@ -1362,7 +1380,9 @@ function cmdReceipt(args) {
   const rest = args.slice(1);
   const flag = (n) => {
     const i = rest.indexOf(n);
-    return i >= 0 ? rest[i + 1] : null;
+    const v = i >= 0 ? rest[i + 1] : null;
+    // guard `--task --result x` → task is missing, not "--result"
+    return v && !String(v).startsWith("--") ? v : null;
   };
   const emit = (o) => process.stdout.write(JSON.stringify(o, null, 2) + "\n");
   const firstFile = () => rest.find((a) => !a.startsWith("-"));
@@ -1375,7 +1395,7 @@ function cmdReceipt(args) {
       process.stderr.write(red("receipt sign: --task, --result and --to <did> are required\n"));
       return 2;
     }
-    const kp = loadOrCreateAgentKey();
+    const kp = agentKeyOrExit();
     const receipt = rc.buildReceipt({
       taskHash: rc.hash(task),
       resultHash: rc.hash(result),
@@ -1399,7 +1419,7 @@ function cmdReceipt(args) {
       process.stderr.write(red(`receipt cosign: ${e.message}\n`));
       return 2;
     }
-    const kp = loadOrCreateAgentKey();
+    const kp = agentKeyOrExit();
     co.sigs = [...(co.sigs || []), rc.sign(co.receipt, kp.privateKey)];
     emit(co);
     return 0;

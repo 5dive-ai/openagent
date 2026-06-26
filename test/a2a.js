@@ -87,6 +87,16 @@ const summary = rc.verifyHistory(history, presA.did);
 ok(summary.valid === 2 && summary.counterparties.length === 2 && summary.bad.length === 0,
   "history: 2 verified receipts across 2 distinct counterparties");
 
+// self-addressed receipt (from === to) is NOT an edge — blocks self-minted
+// reputation even though one signer "covers" both named parties.
+const selfLoop = rc.buildReceipt({
+  taskHash: rc.hash("self"), resultHash: rc.hash("self"),
+  fromDid: presA.did, toDid: presA.did, at: "2026-06-26T15:00:00Z",
+});
+ok(!rc.verify(rc.cosign(selfLoop, A.privateKey, A.privateKey)).ok, "self-addressed receipt rejected (not an edge)");
+ok(rc.verifyHistory([JSON.stringify(rc.cosign(selfLoop, A.privateKey, A.privateKey))], presA.did).valid === 0,
+  "self-loop not credited in history (no self-counterparty)");
+
 // can't pad your record with a receipt you're not party to
 const outsider = rc.cosign(
   rc.buildReceipt({ taskHash: rc.hash("x"), resultHash: rc.hash("y"), fromDid: presB.did, toDid: hs.present({ privateKey: C.privateKey }).did, at: "2026-06-26T14:00:00Z" }),
