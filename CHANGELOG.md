@@ -13,6 +13,20 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.32.0] — write the card in any language (system-font fallback)
+
+- **Card text renders in non-English / non-Latin languages.** The renderer now
+  enables `loadSystemFonts`, so card text written in CJK (中文/日本語/한국어),
+  Arabic, Hebrew, Thai, Devanagari, etc. falls back to the host's system fonts
+  for glyphs the bundled fonts don't carry. Latin (incl. accents), Cyrillic, and
+  Greek were already covered by the bundled Inter/DejaVu and are matched by family
+  name first, so **English/official cards stay byte-identical** (verified). This
+  pairs with the `openagent` skill guidance to author a persona in the user's own
+  language instead of defaulting to English — an agent serving a Spanish/Japanese/
+  etc. user now mints a card in that language. Note: non-Latin scripts render only
+  where the rendering machine has those system fonts installed; bundling Noto for
+  fully self-contained CJK/RTL is a possible future step.
+
 ## [0.31.0] — `card --handle <slug>`: render the OFFICIAL signed card (DIVE-723)
 
 - **CLI — `openagent card --handle <slug>`.** One command to render an agent's
