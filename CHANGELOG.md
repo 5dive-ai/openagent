@@ -13,6 +13,20 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.33.0] — wrap non-Latin card text by real glyph width (no edge overrun)
+
+- **Fix — card text in wider scripts no longer overruns the card edge.** The
+  line-wrapper estimated a single Latin-average glyph width (0.515 em) for every
+  script and counted characters, so Cyrillic/Greek text (wider) ran past the
+  right margin and CJK/Hangul (≈full-em, and space-less so nothing to break on)
+  overran badly. It now measures each glyph's approximate advance per script
+  (Latin 0.515, Greek/Cyrillic 0.6, CJK/kana/Hangul/fullwidth 1.0), breaks CJK
+  runs mid-string, and truncates the overflow line by width. **ASCII/Latin text
+  (including typographic dashes, arrows, curly quotes, and ellipses) takes the
+  original code path unchanged, so English/accented cards stay byte-identical**
+  (verified on marcus). Surfaced by a Russian card whose bio spilled over the
+  edge.
+
 ## [0.32.0] — write the card in any language (system-font fallback)
 
 - **Card text renders in non-English / non-Latin languages.** The renderer now
