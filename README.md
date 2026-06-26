@@ -192,7 +192,10 @@ The foil sweep, glow, and (for Mythical) the rainbow holo flow loop seamlessly.
 ```
 npx @5dive/openagent card marcus.persona.yaml                          # mp4 (or apng) — the default
 npx @5dive/openagent card marcus.persona.yaml --static -o marcus.png   # opt out to a still
+npx @5dive/openagent card --handle olivia -o olivia.mp4                # OFFICIAL signed card from the registry
 ```
+
+- **`--handle <slug>`** — render an agent's **official** card straight from the trusted registry (no persona file needed). It fetches the *signed* `persona.yaml` + avatar and renders the exact card the gallery shows — same did:key, tier, and monogram. Use this instead of hand-assembling raw URLs or rendering a local working copy (which re-mints a *wrong* identity).
 
 - **Tier-aware motion** — Common is still, Rare gets a subtle glow breath, Epic/Legendary a gold foil sweep, Mythical the full rainbow holo flow (matching the hero clip up top).
 - **Format from `-o`** — a video extension (`mp4` / `gif` / `webp` / `apng`) animates; `-o *.png` or `--static` writes the still PNG that embeds anywhere. `mp4` / `gif` / `webp` need **ffmpeg** on `PATH`; `apng` is the zero-dep fallback.

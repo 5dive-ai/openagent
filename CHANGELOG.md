@@ -13,6 +13,20 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.31.0] — `card --handle <slug>`: render the OFFICIAL signed card (DIVE-723)
+
+- **CLI — `openagent card --handle <slug>`.** One command to render an agent's
+  OFFICIAL animated holo card straight from the trusted registry. It resolves the
+  slug against the (HTTPS-anchored) character-packs index, downloads the **SIGNED**
+  `persona.yaml` + avatar into a temp dir, and renders the exact card the gallery
+  shows — same did:key fingerprint, computed tier, and monogram. The persona is
+  never mutated (auto-mint is force-off). This replaces the error-prone workaround
+  of hand-assembling `raw.githubusercontent.com` URLs, and prevents the common
+  mistake of rendering an incomplete local working copy, which re-mints a **wrong**
+  identity (fresh fingerprint, recomputed tier). `--registry` federated sources are
+  searched too; an unknown slug prints the known handles. Reinforces the
+  provenance/anti-drift thesis: the official card is one verb away.
+
 ## [0.30.0] — faceless-card fix: sniff the real image format (DIVE-704)
 
 - **Fix — `resolveFace` now trusts magic bytes, not the file extension.** A

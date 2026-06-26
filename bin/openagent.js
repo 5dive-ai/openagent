@@ -3,7 +3,7 @@
 
 const path = require("path");
 const { validateFile } = require("../lib/validate");
-const { renderCard, renderAnimatedCard, resolveFace, fetchRegistryIds, hasFfmpeg } = require("../lib/card");
+const { renderCard, renderAnimatedCard, resolveFace, materializeHandle, fetchRegistryIds, hasFfmpeg } = require("../lib/card");
 const { computeTier, computeBadges, nextRung, rungNeeds, completenessChecklist, TIER_STYLE } = require("../lib/tier");
 const { registryStatus } = require("../lib/registry");
 const { speak } = require("../lib/speak");
@@ -65,8 +65,9 @@ const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (v0.1)
 ${bold("Usage")}
   openagent init [-o <file>] [--name <n>] [--role <r>] [--id <id>] [--org <o>] [--force]
   openagent validate <persona-file> [<persona-file> ...]
-  openagent card <persona-file> [-o <out>] [--format apng|gif|webp|mp4] [--frames N] [--fps N] [--width px]
+  openagent card <persona-file>|--handle <slug> [-o <out>] [--format apng|gif|webp|mp4] [--frames N] [--fps N] [--width px]
                                             (animated by default; -o *.png or --static for a still PNG)
+                                            (--handle renders the OFFICIAL signed card straight from the registry)
   openagent tier <persona-file> [--json]
   openagent registry [--json] [--offline]
   openagent speak <persona-file> "<text>" [-o <out.wav>] [--voice <name>]
@@ -106,6 +107,12 @@ ${bold("card")}
   <id>.card.mp4 (or .apng without ffmpeg). Motion is TIER-AWARE: Common is still,
   Rare a subtle glow breath, Epic/Legendary a gold foil sweep, Mythical the full
   rainbow holo flow.
+
+  ${bold("--handle <slug>")} renders an agent's OFFICIAL card straight from the trusted
+  registry: it fetches the SIGNED persona + avatar (e.g. olivia, marcus) and renders
+  the exact card the gallery shows — same did:key, tier, and monogram. Use this for
+  content/marketing instead of hand-assembling raw URLs or rendering a local working
+  copy, which re-mints a WRONG identity. The persona is never mutated (no auto-mint).
 
   Format picks itself from -o: a video extension (${bold("mp4")}/${bold("gif")}/${bold("webp")}/${bold("apng")})
   animates; ${bold("-o <name>.png")} or ${bold("--static")} writes the still PNG that embeds
@@ -192,6 +199,7 @@ ${bold("Examples")}
   openagent card marcus.persona.yaml                           # animated card (mp4) by default
   openagent card marcus.persona.yaml -o marcus.png             # still PNG (for embeds)
   openagent card marcus.persona.yaml --format gif              # pick a specific format
+  openagent card --handle olivia -o olivia.mp4                 # OFFICIAL signed card from the registry
   openagent tier marcus.persona.yaml --json
   openagent registry
   GEMINI_API_KEY=… openagent speak marcus.persona.yaml "ship it." -o marcus.wav
@@ -251,6 +259,7 @@ async function cmdCard(args) {
   let noSign = false;              // user passed --no-sign (skip auto-mint identity)
   let format = null; // setting --format implies --animate
   let frames = null, fps = null, width = null;
+  let handle = null;              // user passed --handle <slug> (render official signed card)
   const positional = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -260,6 +269,7 @@ async function cmdCard(args) {
     else if (a === "--animate" || a === "--animated") { animate = true; explicitAnimate = true; }
     else if (a === "--static" || a === "--png" || a === "--no-animate") forceStatic = true;
     else if (a === "--no-sign") noSign = true;
+    else if (a === "--handle") handle = String(args[++i] || "").trim();
     else if (a === "--format" || a === "-f") { format = String(args[++i] || "").toLowerCase(); animate = true; explicitAnimate = true; }
     else if (a === "--frames") frames = parseInt(args[++i], 10);
     else if (a === "--fps") fps = parseInt(args[++i], 10);
@@ -282,11 +292,34 @@ async function cmdCard(args) {
     else if (lo.endsWith(".apng")) { animate = true; format = format || "apng"; }
     else animate = true; // bare render, or any other ext → default to motion
   }
-  if (positional.length === 0) {
-    process.stderr.write(red("card: no persona file given\n\n") + USAGE);
+  // --handle <slug>: render the OFFICIAL signed card straight from the registry.
+  // Resolves + downloads the SIGNED persona (and its avatar) into a temp dir, so
+  // the card matches the gallery exactly — never re-mints a wrong identity from an
+  // incomplete local working copy. Auto-mint is force-off (the registry persona is
+  // already signed; we never mutate it).
+  let file;
+  if (handle) {
+    if (positional.length) {
+      process.stderr.write(red("card: pass either --handle <slug> or a persona file, not both\n"));
+      return 2;
+    }
+    process.stderr.write(dim(`resolving @${handle} from the registry…\n`));
+    const m = await materializeHandle(handle, { registryFlags });
+    if (!m.ok) {
+      process.stderr.write(red(`card: ${m.error}\n`));
+      if (m.available && m.available.length) {
+        process.stderr.write(dim(`        known handles: ${m.available.join(", ")}\n`));
+      }
+      return 2;
+    }
+    file = m.file;
+    noSign = true; // signed registry persona — render as-is, never mint
+  } else if (positional.length === 0) {
+    process.stderr.write(red("card: no persona file given (or use --handle <slug>)\n\n") + USAGE);
     return 2;
+  } else {
+    file = positional[0];
   }
-  const file = positional[0];
   const v = validateFile(file);
   if (!v.ok) {
     process.stdout.write(`${red("✗")} ${file} is not a valid persona — fix it first:\n`);
