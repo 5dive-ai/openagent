@@ -10,6 +10,7 @@ const { speak } = require("../lib/speak");
 const { generateKeypair, signPersona, verifyPersona, didKeyFromPublicKey, shortDidKey, friendlyId, verifyFriendlyId } = require("../lib/provenance");
 const { flow } = require("../lib/flow");
 const { runInit } = require("../lib/init");
+const { loadAgentKey, loadOrCreateAgentKey, agentKeyPath } = require("../lib/keystore");
 const YAML = require("yaml");
 const fs = require("fs");
 
@@ -74,7 +75,8 @@ ${bold("Usage")}
   openagent keygen [-o <prefix>]
   openagent address <persona-file | pubkey-file> [--json]
   openagent id <persona-file | pubkey-file> [--handle <h>] [--check <claim>] [--json]
-  openagent sign <persona-file> --key <privkey.pem> [--name <n>] [--url <u>] [--derived-from <id[:source]>] [-o <out>]
+  openagent sign <persona-file> [--key <privkey.pem>] [--name <n>] [--url <u>] [--derived-from <id[:source]>] [-o <out>]
+                                            (no --key → signs with the agent keystore key, ~/.openagent/agent.key)
   openagent verify <persona-file> [--json]
   openagent doctor <persona-file> [--json] [--no-registry]
   openagent org init   --url <org> --name <Org> --key <orgpriv.key> [--key-id <id>] [-o openagent.json]
@@ -235,16 +237,17 @@ function autoMintIdentity(file) {
   }
   const hasKey = !!persona?.provenance?.created_by?.key;
   if (hasKey) return { minted: false };
-  const kp = generateKeypair();
+  // Sign with the agent's STABLE keystore identity (DIVE-730) — one key per
+  // agent (~/.openagent/agent.key), provisioned on first use — so all of an
+  // agent's cards share one did:key instead of a fresh ephemeral key per file.
+  const kp = loadOrCreateAgentKey();
   const signed = signPersona(persona, { privateKey: kp.privateKey, signedAt: new Date().toISOString() });
   fs.writeFileSync(file, YAML.stringify(signed));
-  const keyfile = file.replace(/\.(persona\.)?ya?ml$/i, "") + ".key";
-  fs.writeFileSync(keyfile, kp.privateKey, { mode: 0o600 });
   const did = didKeyFromPublicKey(signed.provenance.created_by.key);
   const fid = friendlyId(signed.id || "", did).display; // e.g. olivia·z6Mk… → olivia·z8jrr2
   process.stdout.write(
-    `${green("🔑 minted identity")} ${bold(fid)} ${dim(`(${did})`)}\n` +
-    `        ${dim(`private key → ${keyfile} (keep it safe & private; you'll need it to re-sign if you edit the persona)`)}\n`
+    `${green(kp.created ? "🔑 minted identity" : "🔑 signed as")} ${bold(fid)} ${dim(`(${did})`)}\n` +
+    `        ${dim(`agent key ${kp.created ? "created at" : "→"} ${kp.path} (0600 — keep it private; all your cards sign with this one identity)`)}\n`
   );
   return { minted: true, did, fid };
 }
@@ -702,19 +705,29 @@ function cmdSign(args) {
     process.stderr.write(red("sign: no persona file given\n\n") + USAGE);
     return 2;
   }
-  if (!keyPath) {
-    process.stderr.write(red("sign: --key <privkey.pem> is required\n"));
-    return 2;
-  }
   const v = validateFile(file);
   if (!v.ok) {
     process.stdout.write(`${red("✗")} ${file} is not a valid persona — fix it before signing:\n`);
     for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
     return 1;
   }
-  let privateKey, persona;
+  // --key wins; otherwise fall back to a legacy persona-adjacent <id>.key if one
+  // exists, then to the agent's keystore identity (DIVE-730), creating it on
+  // first use. So `openagent sign <file>` just works with the agent's own key.
+  let privateKey, persona, keySrc;
   try {
-    privateKey = fs.readFileSync(keyPath, "utf8");
+    if (!keyPath) {
+      const adjacent = file.replace(/\.(persona\.)?ya?ml$/i, "") + ".key";
+      if (fs.existsSync(adjacent)) keyPath = adjacent;
+    }
+    if (keyPath) {
+      privateKey = fs.readFileSync(keyPath, "utf8");
+      keySrc = keyPath;
+    } else {
+      const kp = loadOrCreateAgentKey();
+      privateKey = kp.privateKey;
+      keySrc = kp.path + (kp.created ? " (new agent key)" : "");
+    }
     persona = loadPersona(file);
   } catch (e) {
     process.stderr.write(red(`sign: ${e.message}\n`));
@@ -750,7 +763,7 @@ function cmdSign(args) {
   const lin = signed.provenance.derived_from
     ? dim(` · derived from ${signed.provenance.derived_from.map((d) => d.id).join(", ")}`)
     : "";
-  process.stdout.write(`${green("✓ SIGNED")} ${target} ${dim(`· by ${name || "anon"}`)}${lin}\n`);
+  process.stdout.write(`${green("✓ SIGNED")} ${target} ${dim(`· by ${name || "anon"} · key ${keySrc}`)}${lin}\n`);
   return 0;
 }
 
