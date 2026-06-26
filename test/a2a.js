@@ -87,6 +87,10 @@ const summary = rc.verifyHistory(history, presA.did);
 ok(summary.valid === 2 && summary.counterparties.length === 2 && summary.bad.length === 0,
   "history: 2 verified receipts across 2 distinct counterparties");
 
+// replay-resistance: the same receipt relayed/submitted twice counts ONCE
+ok(rc.verifyHistory([JSON.stringify(co), JSON.stringify(co)], presA.did).valid === 1,
+  "duplicate receipt counted once (replay-resistant ledger)");
+
 // self-addressed receipt (from === to) is NOT an edge — blocks self-minted
 // reputation even though one signer "covers" both named parties.
 const selfLoop = rc.buildReceipt({
