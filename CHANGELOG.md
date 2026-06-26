@@ -13,6 +13,13 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.34.0] — tune the Cyrillic/Greek wrap width (fill more, no dead margin)
+
+- **Tuning on top of 0.33.0.** The Greek/Cyrillic glyph-advance estimate was 0.6,
+  which wrapped a touch early and left visible right-margin dead space. Lowered to
+  0.54 (closer to Inter's actual Cyrillic advance), so lines fill the width while
+  still clearing the edge. Latin and CJK are unchanged.
+
 ## [0.33.0] — wrap non-Latin card text by real glyph width (no edge overrun)
 
 - **Fix — card text in wider scripts no longer overruns the card edge.** The
