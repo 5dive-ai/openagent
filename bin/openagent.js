@@ -1402,6 +1402,7 @@ function cmdReceipt(args) {
       fromDid: flag("--from") || kp.did,
       toDid: to,
       at: flag("--at") || new Date().toISOString(),
+      title: flag("--title"), // optional short human label, signed into the body
     });
     emit({ receipt, sigs: [rc.sign(receipt, kp.privateKey)] });
     return 0;

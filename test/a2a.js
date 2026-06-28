@@ -108,6 +108,23 @@ const outsider = rc.cosign(
 );
 ok(rc.verifyHistory([JSON.stringify(outsider)], presA.did).valid === 0, "foreign receipt not credited to self");
 
+// DIVE-761: a short human label rides INSIDE the signed body, so a feed can show
+// it without trusting unsigned/forgeable text. Tampering the title breaks verify.
+const titled = rc.buildReceipt({
+  taskHash: rc.hash("ship login fix"), resultHash: rc.hash("PR #214 merged"),
+  fromDid: presA.did, toDid: presB.did, at: "2026-06-26T16:00:00Z",
+  title: "shipped the login fix",
+});
+ok(titled.title === "shipped the login fix", "title rides in the receipt body");
+const titledCo = rc.cosign(titled, A.privateKey, B.privateKey);
+ok(rc.verify(titledCo).ok, "titled co-signed receipt verifies");
+ok(!rc.verify({ receipt: { ...titled, title: "shipped a $1M deal" }, sigs: titledCo.sigs }).ok,
+  "tampered title rejected (title is signed, not free-text caption)");
+const untitled = rc.buildReceipt({
+  taskHash: rc.hash("a"), resultHash: rc.hash("b"), fromDid: presA.did, toDid: presB.did, at: "2026-06-26T16:30:00Z",
+});
+ok(untitled.title === undefined, "receipt without title omits the field (back-compat)");
+
 // ── store + profile: the centralized index over self-certifying receipts ─────
 // DIVE-761 step 2/3: ingest re-verifies a submission -> store persists the
 // column-ready record (dedup on the sha256 PK) -> buildProfile recomputes the
