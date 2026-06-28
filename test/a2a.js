@@ -108,6 +108,42 @@ const outsider = rc.cosign(
 );
 ok(rc.verifyHistory([JSON.stringify(outsider)], presA.did).valid === 0, "foreign receipt not credited to self");
 
+// ── store + profile: the centralized index over self-certifying receipts ─────
+// DIVE-761 step 2/3: ingest re-verifies a submission -> store persists the
+// column-ready record (dedup on the sha256 PK) -> buildProfile recomputes the
+// verified ledger on read. Datastore-neutral (in-memory adapter); the Postgres
+// service mirrors the same put/get/byDid/byDid interface.
+const { createMemoryStore } = require("../lib/a2a-store");
+const { buildProfile } = require("../lib/a2a-profile");
+const ingest = require("../lib/a2a-ingest").ingestReceipt;
+
+const store = createMemoryStore();
+// A<->B and A<->C, both real co-signed receipts, ingested as untrusted submissions.
+const subAB = ingest(co);
+ok(subAB.ok && store.put(subAB.record).stored, "verified A-B receipt ingests and stores");
+const subAC = ingest(rc.cosign(r2, A.privateKey, C.privateKey));
+ok(subAC.ok && store.put(subAC.record).stored, "verified A-C receipt ingests and stores");
+
+// Replay: the identical submission collides on the content-addressed PK.
+ok(store.put(subAB.record).stored === false, "replayed receipt rejected by store PK (dedup)");
+ok(store.size === 2, "store holds two distinct receipts after a replay attempt");
+ok(store.byDid(presA.did).length === 2, "byDid indexes both of A's receipts");
+ok(store.byDid(presB.did).length === 1, "byDid indexes only B's one receipt");
+
+// Profile = card header + honest raw ledger, re-verified from signatures on read.
+const profA = buildProfile({ did: presA.did, store, card: { handle: "marcus" } });
+ok(profA.ok, "buildProfile succeeds for a known did");
+ok(profA.profile.ledger.taskCount === 2, "A's ledger shows 2 verified tasks (raw count)");
+ok(profA.profile.ledger.counterpartyCount === 2, "A's ledger shows 2 distinct counterparties");
+ok(profA.profile.header.handle === "marcus", "profile carries the OpenAgent card header");
+ok(profA.profile.ledger.receipts.every((r) => !("sigFrom" in r) && !("sigTo" in r)),
+  "public profile view omits raw signatures (re-verify is a separate endpoint)");
+const profB = buildProfile({ did: presB.did, store });
+ok(profB.profile.ledger.taskCount === 1 && profB.profile.header === null,
+  "B's profile = 1 task, null header until a card is resolved");
+const profUnknown = buildProfile({ did: hs.present({ privateKey: C.privateKey }).did, store });
+ok(profUnknown.profile.ledger.taskCount === 1, "C is credited for the one receipt it co-signed");
+
 // ── loopback dry-run: two keystores, two "boxes", full canary loop ───────────
 // DIVE-730 step 1: present->challenge->respond->verify + co-sign a receipt over
 // the transport-agnostic a2aRouter, driven by the in-memory loopback adapter.
