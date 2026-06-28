@@ -118,6 +118,7 @@ const os = require("os");
 const path = require("path");
 const { loopbackPair } = require("../lib/a2a-transport");
 const { A2ARouter, nonceFresh } = require("../lib/a2a-router");
+const { ingestReceipt, receiptId } = require("../lib/a2a-ingest");
 const keystore = require("../lib/keystore");
 
 const tick = () => new Promise((r) => setImmediate(r));
@@ -126,6 +127,44 @@ const tick = () => new Promise((r) => setImmediate(r));
   // nonceFresh windows the verifier-side TTL (pure, timer-free).
   ok(nonceFresh(1000, 1500, 1000) === true && nonceFresh(1000, 2500, 1000) === false,
     "nonceFresh windows the challenge by TTL");
+
+  // ── verify-on-ingest (the platform trust gateway, storage-neutral) ─────────
+  // Re-verifies an untrusted submission and normalizes it; from/to are derived
+  // from the verified sigs, replay id = canonical-body sha256.
+  {
+    const P = generateKeypair();
+    const Q = generateKeypair();
+    const pDid = hs.present({ privateKey: P.privateKey }).did;
+    const qDid = hs.present({ privateKey: Q.privateKey }).did;
+    const body = rc.buildReceipt({
+      taskHash: rc.hash("ingest task"), resultHash: rc.hash("ingest done"),
+      fromDid: pDid, toDid: qDid, at: "2026-06-28T02:00:00Z",
+    });
+    const good = rc.cosign(body, P.privateKey, Q.privateKey);
+
+    const ing = ingestReceipt(good);
+    ok(ing.ok && ing.record.fromDid === pDid && ing.record.toDid === qDid,
+      "ingest accepts a valid co-signed receipt, from/to derived from the sigs");
+    ok(ing.record.id === receiptId(body) && ing.record.sigFrom.by === pDid && ing.record.sigTo.by === qDid,
+      "ingest record carries the content-addressed id + each party's signature");
+
+    // request-field spoofing is inert — identity comes from verified content,
+    // not from extra fields a caller tacks onto the submission.
+    const spoofed = { ...good, from: "did:key:zEVIL", to: "did:key:zEVIL", id: "deadbeef" };
+    const ing2 = ingestReceipt(spoofed);
+    ok(ing2.ok && ing2.record.fromDid === pDid && ing2.record.toDid === qDid && ing2.record.id === receiptId(body),
+      "ingest ignores spoofed request-level from/to/id fields");
+
+    ok(!ingestReceipt({ receipt: { ...body, result: rc.hash("tampered") }, sigs: good.sigs }).ok,
+      "ingest rejects a tampered body");
+    ok(!ingestReceipt({ receipt: body, sigs: [good.sigs[0]] }).ok,
+      "ingest rejects a one-sided receipt");
+    const selfBody = rc.buildReceipt({ taskHash: rc.hash("s"), resultHash: rc.hash("s"), fromDid: pDid, toDid: pDid, at: "2026-06-28T03:00:00Z" });
+    ok(!ingestReceipt(rc.cosign(selfBody, P.privateKey, P.privateKey)).ok,
+      "ingest rejects a self-addressed receipt (not an edge)");
+    ok(!ingestReceipt(null).ok && !ingestReceipt({ sigs: [] }).ok,
+      "ingest rejects malformed submissions");
+  }
 
   // Two independent keystores = two boxes, each its own stable did:key.
   const prevHome = process.env.OPENAGENT_HOME;
