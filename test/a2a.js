@@ -108,4 +108,97 @@ const outsider = rc.cosign(
 );
 ok(rc.verifyHistory([JSON.stringify(outsider)], presA.did).valid === 0, "foreign receipt not credited to self");
 
-console.log(`A2A handshake + co-signed receipts: ALL ${n} CHECKS PASS`);
+// ── loopback dry-run: two keystores, two "boxes", full canary loop ───────────
+// DIVE-730 step 1: present->challenge->respond->verify + co-sign a receipt over
+// the transport-agnostic a2aRouter, driven by the in-memory loopback adapter.
+// Two SEPARATE keystores (two OPENAGENT_HOME dirs) stand in for two boxes — the
+// same code path the v1 platform's mediated co-sign will reuse.
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const { loopbackPair } = require("../lib/a2a-transport");
+const { A2ARouter, nonceFresh } = require("../lib/a2a-router");
+const keystore = require("../lib/keystore");
+
+const tick = () => new Promise((r) => setImmediate(r));
+
+(async () => {
+  // nonceFresh windows the verifier-side TTL (pure, timer-free).
+  ok(nonceFresh(1000, 1500, 1000) === true && nonceFresh(1000, 2500, 1000) === false,
+    "nonceFresh windows the challenge by TTL");
+
+  // Two independent keystores = two boxes, each its own stable did:key.
+  const prevHome = process.env.OPENAGENT_HOME;
+  const homeA = fs.mkdtempSync(path.join(os.tmpdir(), "oa-a2a-a-"));
+  const homeB = fs.mkdtempSync(path.join(os.tmpdir(), "oa-a2a-b-"));
+  process.env.OPENAGENT_HOME = homeA;
+  const idA = keystore.loadOrCreateAgentKey();
+  process.env.OPENAGENT_HOME = homeB;
+  const idB = keystore.loadOrCreateAgentKey();
+  ok(idA.did !== idB.did && idA.created && idB.created, "two keystores mint two distinct box identities");
+
+  try {
+    // ── happy path: handshake + co-signed receipt over the loopback ──────────
+    const wire = loopbackPair();
+    const routerA = new A2ARouter({ identity: idA, transport: wire.a, handle: "marcus" });
+    const routerB = new A2ARouter({ identity: idB, transport: wire.b, handle: "lilbro" });
+
+    const { sessionId, peerDid } = await routerA.connect("B");
+    ok(peerDid === idB.did, "initiator verified the responder's did via the live handshake");
+    ok(routerB.verifiedPeer(sessionId) === idA.did, "responder verified the initiator's did via the live handshake");
+
+    const cosigned = await routerA.closeTask(sessionId, {
+      taskHash: rc.hash("ship the DIVE-730 canary"),
+      resultHash: rc.hash("loopback green"),
+      at: "2026-06-28T00:00:00Z",
+    });
+    ok(rc.verify(cosigned).ok, "task-close yields a verifying co-signed receipt");
+    ok(routerA.ledger.length === 1 && routerB.ledger.length === 1, "both boxes hold the co-signed edge");
+
+    const summary = rc.verifyHistory(routerA.ledger.map((c) => JSON.stringify(c)), idA.did);
+    ok(summary.valid === 1 && summary.counterparties.length === 1 && summary.counterparties[0] === idB.did,
+      "verifyHistory shows the cross-box co-signed entry");
+
+    // ── identity-from-handshake, NOT envelope: a validly-signed receipt that
+    // names a DIFFERENT party than the verified peer is refused. ──────────────
+    const C = generateKeypair();
+    const cDid = hs.present({ privateKey: C.privateKey }).did;
+    let bErr = null;
+    routerB.on("error", (e) => { bErr = e.reason; });
+    const before = routerB.ledger.length;
+    const forgedBody = rc.buildReceipt({
+      taskHash: rc.hash("forged"), resultHash: rc.hash("forged"),
+      fromDid: cDid, toDid: idB.did, at: "2026-06-28T01:00:00Z",
+    });
+    wire.a.send(sessionId, { t: "receipt_propose", body: forgedBody, sig: rc.sign(forgedBody, C.privateKey) });
+    await tick();
+    ok(routerB.ledger.length === before && /do not match verified peer/.test(bErr || ""),
+      "receipt naming a non-handshake party is refused (identity from handshake, not envelope)");
+
+    // ── verifier-side nonce TTL: an expired challenge fails the handshake. ────
+    // The verifier's clock returns t0 when it issues the nonce, then jumps past
+    // the TTL before the response arrives — deterministic, no real sleeping.
+    const wire2 = loopbackPair();
+    let ticks = 0;
+    const expiringNow = () => (ticks++ === 0 ? 1000 : 1000 + 10_000);
+    const rA = new A2ARouter({ identity: idA, transport: wire2.a });
+    new A2ARouter({ identity: idB, transport: wire2.b, nonceTtlMs: 1000, now: expiringNow });
+    let expiredReason = "";
+    try {
+      await rA.connect("B");
+    } catch (e) {
+      expiredReason = e.message;
+    }
+    ok(/expired/.test(expiredReason), "verifier-side nonce TTL rejects a stale challenge");
+  } finally {
+    if (prevHome === undefined) delete process.env.OPENAGENT_HOME;
+    else process.env.OPENAGENT_HOME = prevHome;
+    fs.rmSync(homeA, { recursive: true, force: true });
+    fs.rmSync(homeB, { recursive: true, force: true });
+  }
+
+  console.log(`A2A handshake + co-signed receipts + loopback dry-run: ALL ${n} CHECKS PASS`);
+})().catch((e) => {
+  console.error("A2A test failed:", e);
+  process.exit(1);
+});
