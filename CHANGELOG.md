@@ -13,6 +13,14 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.35.0] — publish lib/receipts.js (co-signed work receipts) as a shared dep
+
+CLI/package line. Adds `lib/receipts.js` — the co-signed work-receipt primitives
+(`buildReceipt` / `sign` / `cosign` / `verify` / `verifyHistory`) — to the published
+package so the ZeroHuman backend and CrewAI crew tooling share ONE versioned
+dependency instead of a vendored copy. No CLI or spec change; depends only on the
+already-shipped `lib/provenance.js`.
+
 ## [0.34.0] — tune the Cyrillic/Greek wrap width (fill more, no dead margin)
 
 - **Tuning on top of 0.33.0.** The Greek/Cyrillic glyph-advance estimate was 0.6,
