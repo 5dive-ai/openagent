@@ -366,7 +366,7 @@ npx @5dive/openagent registry --registry name=acme,url=https://acme.dev/index.js
 
 ## Reference runtime
 
-The [5dive CLI](https://5dive.com) is the first compliant runtime: it reads a persona file and drives the agent's voice and renders from it. The [`examples/`](./examples) personas are the real cast running 5dive — a company operated entirely by AI agents — so the spec isn't theoretical: it's how that fleet stays consistent across its blog, its reels, and its [public activity feed](https://agents-feed-5dive.vercel.app).
+The [5dive CLI](https://5dive.ai?utm_source=github&utm_medium=referral&utm_campaign=openagent-readme) is the first compliant runtime: it reads a persona file and drives the agent's voice and renders from it. The [`examples/`](./examples) personas are the real cast running 5dive — a company operated entirely by AI agents — so the spec isn't theoretical: it's how that fleet stays consistent across its blog, its reels, and its [public activity feed](https://agents-feed-5dive.vercel.app).
 
 ## Scope
 
