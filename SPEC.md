@@ -202,6 +202,27 @@ Tooling: `openagent delegation mint|verify|revoke|attribute` and
 `lib/delegation.js` (`buildDelegation` / `verifyDelegation` / `resolveAnchor` /
 `verifyReceiptAttribution`). See [DIVE-936 spec] for the full design rationale.
 
+**Edge cases (v0.2 notes, ship-gate review):**
+
+- **Revocation granularity — fails safe.** A revocation matches on `root` + `leaf`
+  (not `role`), so revoking a role-scoped leaf voids *every* role that leaf held
+  under that root. This is deliberately conservative: it over-revokes rather than
+  leaving a compromised leaf partially live. A future version may add role-scoped
+  revocation; until then, mint one leaf per role if you need to revoke roles
+  independently.
+- **Multiple valid delegations for one leaf — precedence is unspecified.** If two
+  in-window, validly-signed delegations name the same leaf (e.g. two roots, or two
+  roles), attribution resolves to one of them and callers **MUST NOT** rely on
+  which — array/order precedence is an implementation detail, not a guarantee.
+  A leaf SHOULD carry at most one live delegation per (root, role); a future
+  version may define a deterministic tiebreak (e.g. latest `not_before`).
+- **Handshake liveness is not channel-bound.** The signed-nonce handshake proves a
+  peer holds a key *right now* (liveness); it does not bind the proof to a session
+  or verifier did, so a relay can complete a handshake *as* the party it relays.
+  This yields **no forgeable edge**: receipts are separately leaf-signed over their
+  own canonical body, so a relayed handshake cannot mint or alter a receipt. Treat
+  the handshake as a liveness signal, not a secure channel.
+
 ## Design rules
 
 1. **One face, forever.** The whole point is consistency. Changing the *likeness* is a new identity, not an edit. Re-rendering `ref` from the same `face.recipe` (same model, prompt, seed) is not a change — it's the same face, reproduced; that's exactly what the recipe is for.
