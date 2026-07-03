@@ -81,6 +81,8 @@ ${bold("Usage")}
   openagent org attest <persona-file> --key <orgpriv.key> (--url <org> | --did <did:web>) [--key-id <id>] [-o <out>]
   openagent org verify <persona-file> [--json]
   openagent flow <persona-file> "<scene>" [--engine <name>] [--json]
+  openagent conformance [0.1|0.2] [--json]
+  openagent badge [--level 0.1|0.2] [--markdown|--html|--url] [--verify]
   openagent --help
   openagent --version
 
@@ -1262,9 +1264,121 @@ async function main(argv) {
   if (cmd === "doctor") return cmdDoctor(rest);
   if (cmd === "org") return cmdOrg(rest);
   if (cmd === "flow") return cmdFlow(rest);
+  if (cmd === "conformance") return cmdConformance(rest);
+  if (cmd === "badge") return cmdBadge(rest);
 
   process.stderr.write(red(`unknown command: ${cmd}\n\n`) + USAGE);
   return 2;
+}
+
+// Where the badge SVGs live once pushed. Raw GitHub is CDN-fronted and
+// content-addressed by ref, so pinning to a tag gives adopters a stable image.
+const BADGE_BASE = "https://raw.githubusercontent.com/5dive-ai/openagent/main/assets/badge";
+const BADGE_LINK = "https://github.com/5dive-ai/openagent#openagent-compatible";
+
+function badgeSnippet(level, kind) {
+  const alt = `OpenAgent ${level} compatible`;
+  const img = `${BADGE_BASE}/openagent-${level}-compatible.svg`;
+  if (kind === "url") return img;
+  if (kind === "html") {
+    return `<a href="${BADGE_LINK}"><img src="${img}" alt="${alt}"></a>`;
+  }
+  // markdown (default)
+  return `[![${alt}](${img})](${BADGE_LINK})`;
+}
+
+// openagent conformance [0.1|0.2] [--json] — run this implementation against
+// the portable suite (conformance/manifest.json) and report, per level, whether
+// every case matched its expected verdict. This is what earns the right to show
+// the "OpenAgent-compatible" badge; `badge --verify` gates on it. Exit 0 = pass.
+async function cmdConformance(args) {
+  const { runConformance } = require("../lib/conformance");
+  const json = args.includes("--json");
+  const level = args.find((a) => !a.startsWith("-")) || null;
+  if (level && level !== "0.1" && level !== "0.2") {
+    process.stderr.write(red(`conformance: unknown level '${level}' (0.1|0.2)\n\n`) + USAGE);
+    return 2;
+  }
+  let r;
+  try {
+    r = runConformance(level);
+  } catch (e) {
+    process.stderr.write(red(`conformance: ${e.message}\n`));
+    return 2;
+  }
+  if (json) {
+    process.stdout.write(JSON.stringify(r, null, 2) + "\n");
+    return r.ok ? 0 : 1;
+  }
+  for (const cse of r.results) {
+    if (cse.ok) process.stdout.write(dim(`  ok   `) + `[${cse.spec}] ${cse.name}\n`);
+    else {
+      process.stdout.write(red(`  FAIL `) + `[${cse.spec}] ${cse.name}\n`);
+      for (const p of cse.problems) process.stdout.write(`         ${p}\n`);
+    }
+  }
+  const scope = level ? ` (level ${level} and below)` : " (all levels)";
+  if (r.ok) {
+    process.stdout.write(
+      "\n" + green(`✓ OpenAgent ${level || "0.2"} compliant`) +
+        ` — ${r.passed}/${r.total} cases passed${scope}\n`
+    );
+    return 0;
+  }
+  process.stdout.write(
+    "\n" + red(`✗ ${r.failures.length} case(s) failed`) + ` — ${r.passed}/${r.total} passed${scope}\n`
+  );
+  return 1;
+}
+
+// openagent badge [--level 0.1|0.2] [--markdown|--html|--url] [--verify] —
+// print the copy-paste snippet for the "OpenAgent-compatible" badge. With
+// --verify, first run the conformance suite for the level and only emit the
+// badge if THIS implementation actually passes (self-attestation, so the badge
+// means something). Default level is 0.2, default kind is markdown.
+async function cmdBadge(args) {
+  let level = "0.2";
+  let kind = "markdown";
+  let verify = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--level") level = String(args[++i] || "").trim();
+    else if (a === "--markdown" || a === "--md") kind = "markdown";
+    else if (a === "--html") kind = "html";
+    else if (a === "--url") kind = "url";
+    else if (a === "--verify") verify = true;
+    else if (a === "0.1" || a === "0.2") level = a; // positional convenience
+    else {
+      process.stderr.write(red(`badge: unexpected argument '${a}'\n\n`) + USAGE);
+      return 2;
+    }
+  }
+  if (level !== "0.1" && level !== "0.2") {
+    process.stderr.write(red(`badge: unknown level '${level}' (0.1|0.2)\n\n`) + USAGE);
+    return 2;
+  }
+  if (verify) {
+    const { runConformance } = require("../lib/conformance");
+    let r;
+    try {
+      r = runConformance(level);
+    } catch (e) {
+      process.stderr.write(red(`badge: conformance run failed: ${e.message}\n`));
+      return 2;
+    }
+    if (!r.ok) {
+      process.stderr.write(
+        red(`✗ not OpenAgent ${level} compliant`) +
+          ` — ${r.failures.length}/${r.total} case(s) failed. Run \`openagent conformance ${level}\` for detail.\n`
+      );
+      return 1;
+    }
+    process.stderr.write(
+      green(`✓ OpenAgent ${level} compliant`) + ` (${r.passed}/${r.total} cases) — badge earned:\n\n`
+    );
+  }
+  process.stdout.write(badgeSnippet(level, kind) + "\n");
+  return 0;
 }
 
 main(process.argv).then((code) => process.exit(code)).catch((e) => {

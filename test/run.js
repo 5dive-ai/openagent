@@ -638,6 +638,21 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("completeness percent matches checklist fraction",
     computeTier(marcus, { schemaValid: true }).completeness === fromList);
 
+  // 7b. Conformance library (backs `openagent conformance` + `badge --verify`).
+  console.log("\n-- conformance library --");
+  const { runConformance: runConf, LEVELS, levelsUpTo } = require("../lib/conformance");
+  const confAll = runConf();
+  check("this impl is fully compliant (all levels pass)", confAll.ok === true && confAll.failures.length === 0);
+  check("conformance result carries a structured tally", confAll.total > 0 && confAll.passed === confAll.total);
+  const conf01 = runConf("0.1");
+  check("level 0.1 runs a subset of all levels", conf01.total <= confAll.total && conf01.ok === true);
+  check("levelsUpTo('0.1') excludes 0.2", !levelsUpTo("0.1").includes("0.2") && LEVELS.includes("0.2"));
+
+  // Badge snippet shape — the copy-paste artifact adopters embed.
+  check("badge SVG assets are shipped", fs.existsSync(path.join(__dirname, "..", "assets", "badge", "openagent-0.1-compatible.svg")) &&
+    fs.existsSync(path.join(__dirname, "..", "assets", "badge", "openagent-0.2-compatible.svg")));
+  check("package ships the badge assets dir", require("../package.json").files.includes("assets/"));
+
   // 8. Conformance suite — run the portable manifest against this impl.
   console.log("\n-- conformance suite --");
   failures += runConformance();

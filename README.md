@@ -368,6 +368,34 @@ npx @5dive/openagent registry --registry name=acme,url=https://acme.dev/index.js
 
 The [5dive CLI](https://5dive.ai?utm_source=github&utm_medium=referral&utm_campaign=openagent-readme) is the first compliant runtime: it reads a persona file and drives the agent's voice and renders from it. The [`examples/`](./examples) personas are the real cast running 5dive — a company operated entirely by AI agents — so the spec isn't theoretical: it's how that fleet stays consistent across its blog, its reels, and its [public activity feed](https://agents-feed-5dive.vercel.app).
 
+## OpenAgent-compatible
+
+Built a tool that reads the persona format? Say so with the badge:
+
+[![OpenAgent 0.2 compatible](assets/badge/openagent-0.2-compatible.svg)](#openagent-compatible)
+&nbsp;
+[![OpenAgent 0.1 compatible](assets/badge/openagent-0.1-compatible.svg)](#openagent-compatible)
+
+The badge is a **conformance claim, not a vibe**. You earn the right to show it by passing the portable [conformance suite](./conformance), a single language-agnostic [`manifest.json`](./conformance/manifest.json) of valid/invalid personas with expected verdicts. Two levels:
+
+- **0.1 compatible**: your validator agrees with every `"spec": "0.1"` case (the floor).
+- **0.2 compatible**: every 0.1 case **and** every 0.2 case (adds `provenance`, `ext`, `links.agent_card`, `face.recipe`). 0.2 is an additive superset of 0.1.
+
+**Verify + earn it (this CLI, or any tool built on `@5dive/openagent`):**
+
+```
+npx @5dive/openagent conformance 0.2      # run the suite, exit 0 = compliant
+npx @5dive/openagent badge --verify       # prints the badge snippet ONLY if you pass
+```
+
+`conformance` runs the reference implementation against the same manifest a third-party tool would load. `badge` emits the copy-paste snippet (`--markdown` default, `--html`, `--url`, `--level 0.1|0.2`). Building in another language? Load `conformance/manifest.json`, feed each case's `doc` to your validator, and check the verdict yourself, then paste the snippet:
+
+```markdown
+[![OpenAgent 0.2 compatible](https://raw.githubusercontent.com/5dive-ai/openagent/main/assets/badge/openagent-0.2-compatible.svg)](https://github.com/5dive-ai/openagent#openagent-compatible)
+```
+
+Adopters who validate personas in CI can also drop in the [GitHub Action](./action.yml). Shipped a compatible runtime or tool? Open a PR and we'll list it here.
+
 ## Scope
 
 v0.1 is the **identity layer only** (face · audio voice · written voice · behavior). Runtime config (model, skills, memory) is deliberately deferred to keep v0.1 sharp and implementable.

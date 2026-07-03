@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="176" height="20" role="img" aria-label="OpenAgent: 0.2 compatible">
+  <title>OpenAgent: 0.2 compatible</title>
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="r"><rect width="176" height="20" rx="3" fill="#fff"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="71" height="20" fill="#2a2440"/>
+    <rect x="71" width="105" height="20" fill="#6E56CF"/>
+    <rect width="176" height="20" fill="url(#s)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
+    <text x="365" y="150" transform="scale(.1)" textLength="610">OpenAgent</text>
+    <text x="1225" y="150" transform="scale(.1)" textLength="950">0.2 compatible</text>
+  </g>
+</svg>

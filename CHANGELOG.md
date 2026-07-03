@@ -13,6 +13,26 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.36.0] — the "OpenAgent-compatible" badge (conformance-gated). CLI only, spec unchanged.
+
+- **New: `openagent conformance [0.1|0.2] [--json]`.** Runs this implementation
+  against the portable `conformance/manifest.json` and reports, per level,
+  whether every case matched its expected verdict. Exit 0 = compliant. This is
+  the machine core behind the badge, factored into a reusable `lib/conformance.js`
+  that `test/conformance.js`, the CLI, and `badge --verify` all share (one source
+  of truth for what "compliant" means).
+- **New: `openagent badge [--level 0.1|0.2] [--markdown|--html|--url] [--verify]`.**
+  Prints the copy-paste "OpenAgent-compatible" badge snippet. With `--verify` it
+  first runs the conformance suite for the level and only emits the badge if this
+  implementation actually passes, so the badge is a self-attested conformance
+  claim, not a decoration.
+- **New badge assets** (`assets/badge/openagent-0.1-compatible.svg`,
+  `openagent-0.2-compatible.svg`) plus a README **"OpenAgent-compatible"** section
+  documenting the two compliance levels, how to verify/earn the badge, and the
+  copy-paste snippet for adopters in any language.
+- Spec unchanged (still 0.2). Build half of DIVE-905 (split from DIVE-641); the
+  reference-consumer outreach half stays on DIVE-641.
+
 ## [0.35.0] — publish lib/receipts.js (co-signed work receipts) as a shared dep
 
 CLI/package line. Adds `lib/receipts.js` — the co-signed work-receipt primitives
