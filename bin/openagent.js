@@ -10,6 +10,7 @@ const { speak } = require("../lib/speak");
 const { generateKeypair, signPersona, verifyPersona, didKeyFromPublicKey, shortDidKey, friendlyId, verifyFriendlyId } = require("../lib/provenance");
 const { flow } = require("../lib/flow");
 const { runInit } = require("../lib/init");
+const { loadAgentKey, loadOrCreateAgentKey, agentKeyPath } = require("../lib/keystore");
 const YAML = require("yaml");
 const fs = require("fs");
 
@@ -74,7 +75,8 @@ ${bold("Usage")}
   openagent keygen [-o <prefix>]
   openagent address <persona-file | pubkey-file> [--json]
   openagent id <persona-file | pubkey-file> [--handle <h>] [--check <claim>] [--json]
-  openagent sign <persona-file> --key <privkey.pem> [--name <n>] [--url <u>] [--derived-from <id[:source]>] [-o <out>]
+  openagent sign <persona-file> [--key <privkey.pem>] [--name <n>] [--url <u>] [--derived-from <id[:source]>] [-o <out>]
+                                            (no --key → signs with the agent keystore key, ~/.openagent/agent.key)
   openagent verify <persona-file> [--json]
   openagent doctor <persona-file> [--json] [--no-registry]
   openagent org init   --url <org> --name <Org> --key <orgpriv.key> [--key-id <id>] [-o openagent.json]
@@ -196,6 +198,29 @@ ${bold("doctor")}
   broken signature), 2 = usage/IO error. --json emits the full machine report;
   --no-registry skips the (network) Mythical-conferral lookup.
 
+${bold("handshake")}
+  Prove who you are to another agent, live (A2A). present → your did:key + public
+  key (+ optional --handle/--url to resolve against a signed registry); challenge →
+  a fresh nonce; respond <nonce> → sign it with your keystore key; verify
+  --presentation <file> --nonce --signature → checks the did derives from the key
+  AND the signature is live. Exit 0 = key ownership proven, 1 = not. JSON in/out.
+
+${bold("receipt")}
+  Co-signed work receipts — the verifiable edge between two agents. sign --task
+  --result --to <did> [--at] → a receipt from you, signed once; cosign <file> → add
+  your signature to a partial; verify <file> → both sigs valid over the body (exit
+  0/1); history <file.jsonl> → your earned ledger (verified receipts, distinct
+  counterparties). No chain, no token: two signatures = both attest it happened.
+
+${bold("delegation")}
+  Rotatable-root anchor — a stable root delegates signing to rotatable leaf keys,
+  so history survives key rotation with NO central registry. mint --leaf <did>
+  --not-before <iso> [--not-after <iso>] [--role R] → a signed delegation from your
+  keystore root; verify <file> → the statement's root signature is valid (exit
+  0/1); revoke --leaf <did> [--at <iso>] → a signed revocation; attribute <receipt>
+  [--delegations f] [--revocations f] → walk each party's leaf to its root. A
+  receipt with no delegation stays self-anchored (leaf == root).
+
 ${bold("Examples")}
   openagent validate marcus.persona.yaml
   openagent card marcus.persona.yaml                           # animated card (mp4) by default
@@ -211,6 +236,8 @@ ${bold("Examples")}
   openagent verify vera.persona.yaml
   openagent doctor marcus.persona.yaml                         # full pre-flight before sharing/PR
   openagent flow marcus.persona.yaml "at his desk reviewing a pull request, late evening"
+  openagent handshake present > me.json                        # A2A: prove who you are, live
+  openagent receipt sign --task "build login fix" --result "PR #214 merged" --to did:key:z6Mk…
 `;
 
 function loadPersona(file) {
@@ -237,16 +264,17 @@ function autoMintIdentity(file) {
   }
   const hasKey = !!persona?.provenance?.created_by?.key;
   if (hasKey) return { minted: false };
-  const kp = generateKeypair();
+  // Sign with the agent's STABLE keystore identity (DIVE-730) — one key per
+  // agent (~/.openagent/agent.key), provisioned on first use — so all of an
+  // agent's cards share one did:key instead of a fresh ephemeral key per file.
+  const kp = loadOrCreateAgentKey();
   const signed = signPersona(persona, { privateKey: kp.privateKey, signedAt: new Date().toISOString() });
   fs.writeFileSync(file, YAML.stringify(signed));
-  const keyfile = file.replace(/\.(persona\.)?ya?ml$/i, "") + ".key";
-  fs.writeFileSync(keyfile, kp.privateKey, { mode: 0o600 });
   const did = didKeyFromPublicKey(signed.provenance.created_by.key);
   const fid = friendlyId(signed.id || "", did).display; // e.g. olivia·z6Mk… → olivia·z8jrr2
   process.stdout.write(
-    `${green("🔑 minted identity")} ${bold(fid)} ${dim(`(${did})`)}\n` +
-    `        ${dim(`private key → ${keyfile} (keep it safe & private; you'll need it to re-sign if you edit the persona)`)}\n`
+    `${green(kp.created ? "🔑 minted identity" : "🔑 signed as")} ${bold(fid)} ${dim(`(${did})`)}\n` +
+    `        ${dim(`agent key ${kp.created ? "created at" : "→"} ${kp.path} (0600 — keep it private; all your cards sign with this one identity)`)}\n`
   );
   return { minted: true, did, fid };
 }
@@ -704,19 +732,29 @@ function cmdSign(args) {
     process.stderr.write(red("sign: no persona file given\n\n") + USAGE);
     return 2;
   }
-  if (!keyPath) {
-    process.stderr.write(red("sign: --key <privkey.pem> is required\n"));
-    return 2;
-  }
   const v = validateFile(file);
   if (!v.ok) {
     process.stdout.write(`${red("✗")} ${file} is not a valid persona — fix it before signing:\n`);
     for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
     return 1;
   }
-  let privateKey, persona;
+  // --key wins; otherwise fall back to a legacy persona-adjacent <id>.key if one
+  // exists, then to the agent's keystore identity (DIVE-730), creating it on
+  // first use. So `openagent sign <file>` just works with the agent's own key.
+  let privateKey, persona, keySrc;
   try {
-    privateKey = fs.readFileSync(keyPath, "utf8");
+    if (!keyPath) {
+      const adjacent = file.replace(/\.(persona\.)?ya?ml$/i, "") + ".key";
+      if (fs.existsSync(adjacent)) keyPath = adjacent;
+    }
+    if (keyPath) {
+      privateKey = fs.readFileSync(keyPath, "utf8");
+      keySrc = keyPath;
+    } else {
+      const kp = agentKeyOrExit();
+      privateKey = kp.privateKey;
+      keySrc = kp.path + (kp.created ? " (new agent key)" : "");
+    }
     persona = loadPersona(file);
   } catch (e) {
     process.stderr.write(red(`sign: ${e.message}\n`));
@@ -752,7 +790,7 @@ function cmdSign(args) {
   const lin = signed.provenance.derived_from
     ? dim(` · derived from ${signed.provenance.derived_from.map((d) => d.id).join(", ")}`)
     : "";
-  process.stdout.write(`${green("✓ SIGNED")} ${target} ${dim(`· by ${name || "anon"}`)}${lin}\n`);
+  process.stdout.write(`${green("✓ SIGNED")} ${target} ${dim(`· by ${name || "anon"} · key ${keySrc}`)}${lin}\n`);
   return 0;
 }
 
@@ -1266,6 +1304,9 @@ async function main(argv) {
   if (cmd === "flow") return cmdFlow(rest);
   if (cmd === "conformance") return cmdConformance(rest);
   if (cmd === "badge") return cmdBadge(rest);
+  if (cmd === "handshake") return cmdHandshake(rest);
+  if (cmd === "receipt") return cmdReceipt(rest);
+  if (cmd === "delegation") return cmdDelegation(rest);
 
   process.stderr.write(red(`unknown command: ${cmd}\n\n`) + USAGE);
   return 2;
@@ -1379,6 +1420,285 @@ async function cmdBadge(args) {
   }
   process.stdout.write(badgeSnippet(level, kind) + "\n");
   return 0;
+}
+
+// Load (or first-time mint) this agent's keystore identity, or exit cleanly.
+// The create-path verbs need a writable keystore; on a read-only $HOME / EACCES
+// / unset HOME (common in headless systemd units — the fleet case) we want a
+// clear one-liner, not a raw stack from main().catch.
+function agentKeyOrExit() {
+  try {
+    return loadOrCreateAgentKey();
+  } catch (e) {
+    process.stderr.write(
+      red(`cannot write keystore at ${agentKeyPath()}: ${e.message}\n`) +
+        dim("  fix the dir's perms, or set OPENAGENT_HOME to a writable directory\n"),
+    );
+    process.exit(2);
+  }
+}
+
+// openagent handshake <present|challenge|respond|verify> — A2A liveness proof
+// (DIVE-730). Scriptable JSON in/out; identity loaded from the keystore so the
+// caller never handles a key. Pairs with the signed registry for the official
+// identity; this proves the peer holds the private half RIGHT NOW.
+function cmdHandshake(args) {
+  const hs = require("../lib/handshake");
+  const sub = args[0];
+  const rest = args.slice(1);
+  const flag = (n) => {
+    const i = rest.indexOf(n);
+    const v = i >= 0 ? rest[i + 1] : null;
+    // guard `--task --result x` → task is missing, not "--result"
+    return v && !String(v).startsWith("--") ? v : null;
+  };
+  const emit = (o) => process.stdout.write(JSON.stringify(o, null, 2) + "\n");
+
+  if (sub === "present") {
+    const kp = agentKeyOrExit();
+    emit(hs.present({ privateKey: kp.privateKey, handle: flag("--handle"), cardUrl: flag("--url") }));
+    return 0;
+  }
+  if (sub === "challenge") {
+    emit({ nonce: hs.challenge() });
+    return 0;
+  }
+  if (sub === "respond") {
+    const nonce = rest.find((a) => !a.startsWith("-")) || flag("--nonce");
+    if (!nonce) {
+      process.stderr.write(red("handshake respond: a nonce is required\n"));
+      return 2;
+    }
+    const kp = agentKeyOrExit();
+    emit({ did: kp.did, signature: hs.respond(nonce, kp.privateKey) });
+    return 0;
+  }
+  if (sub === "verify") {
+    const presF = flag("--presentation");
+    if (!presF) {
+      process.stderr.write(red("handshake verify: --presentation <file> required\n"));
+      return 2;
+    }
+    let presentation;
+    try {
+      presentation = JSON.parse(fs.readFileSync(presF, "utf8"));
+    } catch (e) {
+      process.stderr.write(red(`handshake verify: ${e.message}\n`));
+      return 2;
+    }
+    const r = hs.verifyResponse({ presentation, nonce: flag("--nonce"), signature: flag("--signature") });
+    emit(r);
+    return r.ok ? 0 : 1;
+  }
+  process.stderr.write(red(`handshake: unknown subcommand${sub ? ` '${sub}'` : ""} (present|challenge|respond|verify)\n`));
+  return 2;
+}
+
+// openagent receipt <sign|cosign|verify|history> — co-signed work receipts
+// (DIVE-730). The verifiable edge between two agents: two ed25519 signatures
+// over one canonical body. No chain, no token — both parties just attest the
+// work happened. Identity loaded from the keystore.
+function cmdReceipt(args) {
+  const rc = require("../lib/receipts");
+  const sub = args[0];
+  const rest = args.slice(1);
+  const flag = (n) => {
+    const i = rest.indexOf(n);
+    const v = i >= 0 ? rest[i + 1] : null;
+    // guard `--task --result x` → task is missing, not "--result"
+    return v && !String(v).startsWith("--") ? v : null;
+  };
+  const emit = (o) => process.stdout.write(JSON.stringify(o, null, 2) + "\n");
+  const firstFile = () => rest.find((a) => !a.startsWith("-"));
+
+  if (sub === "sign") {
+    const task = flag("--task");
+    const result = flag("--result");
+    const to = flag("--to");
+    if (!task || !result || !to) {
+      process.stderr.write(red("receipt sign: --task, --result and --to <did> are required\n"));
+      return 2;
+    }
+    const kp = agentKeyOrExit();
+    const receipt = rc.buildReceipt({
+      taskHash: rc.hash(task),
+      resultHash: rc.hash(result),
+      fromDid: flag("--from") || kp.did,
+      toDid: to,
+      at: flag("--at") || new Date().toISOString(),
+      title: flag("--title"), // optional short human label, signed into the body
+    });
+    emit({ receipt, sigs: [rc.sign(receipt, kp.privateKey)] });
+    return 0;
+  }
+  if (sub === "cosign") {
+    const f = firstFile();
+    if (!f) {
+      process.stderr.write(red("receipt cosign: a <partial-receipt-file> is required\n"));
+      return 2;
+    }
+    let co;
+    try {
+      co = JSON.parse(fs.readFileSync(f, "utf8"));
+    } catch (e) {
+      process.stderr.write(red(`receipt cosign: ${e.message}\n`));
+      return 2;
+    }
+    const kp = agentKeyOrExit();
+    co.sigs = [...(co.sigs || []), rc.sign(co.receipt, kp.privateKey)];
+    emit(co);
+    return 0;
+  }
+  if (sub === "verify") {
+    const f = firstFile();
+    if (!f) {
+      process.stderr.write(red("receipt verify: a <receipt-file> is required\n"));
+      return 2;
+    }
+    let co;
+    try {
+      co = JSON.parse(fs.readFileSync(f, "utf8"));
+    } catch (e) {
+      process.stderr.write(red(`receipt verify: ${e.message}\n`));
+      return 2;
+    }
+    const r = rc.verify(co, { requireBoth: !rest.includes("--one-sided-ok") });
+    emit(r);
+    return r.ok ? 0 : 1;
+  }
+  if (sub === "history") {
+    const f = firstFile();
+    if (!f) {
+      process.stderr.write(red("receipt history: a <history.jsonl> file is required\n"));
+      return 2;
+    }
+    let lines;
+    try {
+      lines = fs.readFileSync(f, "utf8").split("\n");
+    } catch (e) {
+      process.stderr.write(red(`receipt history: ${e.message}\n`));
+      return 2;
+    }
+    const self = flag("--self") || (loadAgentKey() || {}).did || null;
+    emit(rc.verifyHistory(lines, self));
+    return 0;
+  }
+  process.stderr.write(red(`receipt: unknown subcommand${sub ? ` '${sub}'` : ""} (sign|cosign|verify|history)\n`));
+  return 2;
+}
+
+// openagent delegation <mint|verify|revoke|attribute> — rotatable-root anchor
+// (DIVE-949). The keystore identity is the stable ROOT; it delegates day-to-day
+// signing to a rotatable LEAF via a self-contained signed statement, so a
+// receipt attributes to the root with NO central registry. Single-key receipts
+// with no delegation stay self-anchored (leaf == root) — nothing to break.
+function cmdDelegation(args) {
+  const dl = require("../lib/delegation");
+  const sub = args[0];
+  const rest = args.slice(1);
+  const flag = (n) => {
+    const i = rest.indexOf(n);
+    const v = i >= 0 ? rest[i + 1] : null;
+    return v && !String(v).startsWith("--") ? v : null;
+  };
+  const emit = (o) => process.stdout.write(JSON.stringify(o, null, 2) + "\n");
+  const firstFile = () => rest.find((a) => !a.startsWith("-"));
+  // Load statements from a file that is either a JSON array or JSONL (one
+  // statement per line) — the two shapes a feed or receipt bundle carries.
+  const loadStatements = (f) => {
+    if (!f) return [];
+    const raw = fs.readFileSync(f, "utf8").trim();
+    if (!raw) return [];
+    // A single JSON value first (a pretty-printed object, or an array of them)…
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      // …otherwise it's JSONL: one statement per line (a feed bundle).
+      return raw.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+    }
+  };
+
+  if (sub === "mint") {
+    const leaf = flag("--leaf");
+    const notBefore = flag("--not-before");
+    if (!leaf || !notBefore) {
+      process.stderr.write(red("delegation mint: --leaf <did> and --not-before <iso8601> are required\n"));
+      return 2;
+    }
+    const kp = agentKeyOrExit();
+    try {
+      emit(dl.buildDelegation({
+        rootPrivateKey: kp.privateKey,
+        leafDid: leaf,
+        role: flag("--role"),
+        notBefore,
+        notAfter: flag("--not-after"), // omit → null (until revoked)
+      }));
+    } catch (e) {
+      process.stderr.write(red(`delegation mint: ${e.message}\n`));
+      return 2;
+    }
+    return 0;
+  }
+  if (sub === "revoke") {
+    const leaf = flag("--leaf");
+    if (!leaf) {
+      process.stderr.write(red("delegation revoke: --leaf <did> is required\n"));
+      return 2;
+    }
+    const kp = agentKeyOrExit();
+    try {
+      emit(dl.buildRevocation({
+        rootPrivateKey: kp.privateKey,
+        leafDid: leaf,
+        role: flag("--role"),
+        revokedAt: flag("--at") || new Date().toISOString(),
+      }));
+    } catch (e) {
+      process.stderr.write(red(`delegation revoke: ${e.message}\n`));
+      return 2;
+    }
+    return 0;
+  }
+  if (sub === "verify") {
+    const f = firstFile();
+    if (!f) {
+      process.stderr.write(red("delegation verify: a <delegation-file> is required\n"));
+      return 2;
+    }
+    let d;
+    try {
+      d = JSON.parse(fs.readFileSync(f, "utf8"));
+    } catch (e) {
+      process.stderr.write(red(`delegation verify: ${e.message}\n`));
+      return 2;
+    }
+    const r = d && d.typ === dl.REVOCATION_TYP ? dl.verifyRevocation(d) : dl.verifyDelegation(d);
+    emit(r);
+    return r.ok ? 0 : 1;
+  }
+  if (sub === "attribute") {
+    const f = firstFile();
+    if (!f) {
+      process.stderr.write(red("delegation attribute: a <receipt-file> is required (--delegations/--revocations optional)\n"));
+      return 2;
+    }
+    let co, delegations, revocations;
+    try {
+      co = JSON.parse(fs.readFileSync(f, "utf8"));
+      delegations = loadStatements(flag("--delegations"));
+      revocations = loadStatements(flag("--revocations"));
+    } catch (e) {
+      process.stderr.write(red(`delegation attribute: ${e.message}\n`));
+      return 2;
+    }
+    const r = dl.verifyReceiptAttribution(co, { delegations, revocations });
+    emit(r);
+    return r.ok ? 0 : 1;
+  }
+  process.stderr.write(red(`delegation: unknown subcommand${sub ? ` '${sub}'` : ""} (mint|verify|revoke|attribute)\n`));
+  return 2;
 }
 
 main(process.argv).then((code) => process.exit(code)).catch((e) => {

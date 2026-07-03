@@ -652,6 +652,31 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("badge SVG assets are shipped", fs.existsSync(path.join(__dirname, "..", "assets", "badge", "openagent-0.1-compatible.svg")) &&
     fs.existsSync(path.join(__dirname, "..", "assets", "badge", "openagent-0.2-compatible.svg")));
   check("package ships the badge assets dir", require("../package.json").files.includes("assets/"));
+  // 7d. Per-agent keystore (DIVE-730) — create-once, reuse, mode, did stability.
+  // Uses a throwaway OPENAGENT_HOME so the real ~/.openagent is never touched.
+  console.log("\n-- agent keystore --");
+  const os = require("os");
+  const ksHome = fs.mkdtempSync(path.join(os.tmpdir(), "oa-ks-"));
+  const prevHome = process.env.OPENAGENT_HOME;
+  process.env.OPENAGENT_HOME = ksHome;
+  delete require.cache[require.resolve("../lib/keystore")];
+  const keystore = require("../lib/keystore");
+  check("OPENAGENT_HOME overrides the key location", keystore.agentKeyPath().startsWith(ksHome));
+  check("loadAgentKey is null before first use", keystore.loadAgentKey() === null);
+  const ks1 = keystore.loadOrCreateAgentKey();
+  check("loadOrCreateAgentKey mints on first call", ks1.created === true && /^did:key:z6Mk/.test(ks1.did));
+  check("agent.key is written 0600", (fs.statSync(keystore.agentKeyPath()).mode & 0o777) === 0o600);
+  check("agent.pub is written alongside", fs.existsSync(keystore.agentPubPath()));
+  const ks2 = keystore.loadOrCreateAgentKey();
+  check("second call reuses the same identity (not re-minted)", ks2.created === false && ks2.did === ks1.did);
+  check("loadAgentKey now returns the stored identity", keystore.loadAgentKey().did === ks1.did);
+  // The stored private key actually signs + verifies via provenance (one identity).
+  const ksSigned = provenance.signPersona(marcusDoc, { privateKey: keystore.loadAgentKey().privateKey });
+  check("keystore key signs a persona that verifies", provenance.verifyPersona(ksSigned).ok === true &&
+    provenance.didKeyFromPublicKey(ksSigned.provenance.created_by.key) === ks1.did);
+  if (prevHome === undefined) delete process.env.OPENAGENT_HOME; else process.env.OPENAGENT_HOME = prevHome;
+  delete require.cache[require.resolve("../lib/keystore")];
+  fs.rmSync(ksHome, { recursive: true, force: true });
 
   // 8. Conformance suite — run the portable manifest against this impl.
   console.log("\n-- conformance suite --");
