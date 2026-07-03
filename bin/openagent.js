@@ -210,6 +210,15 @@ ${bold("receipt")}
   0/1); history <file.jsonl> → your earned ledger (verified receipts, distinct
   counterparties). No chain, no token: two signatures = both attest it happened.
 
+${bold("delegation")}
+  Rotatable-root anchor — a stable root delegates signing to rotatable leaf keys,
+  so history survives key rotation with NO central registry. mint --leaf <did>
+  --not-before <iso> [--not-after <iso>] [--role R] → a signed delegation from your
+  keystore root; verify <file> → the statement's root signature is valid (exit
+  0/1); revoke --leaf <did> [--at <iso>] → a signed revocation; attribute <receipt>
+  [--delegations f] [--revocations f] → walk each party's leaf to its root. A
+  receipt with no delegation stays self-anchored (leaf == root).
+
 ${bold("Examples")}
   openagent validate marcus.persona.yaml
   openagent card marcus.persona.yaml                           # animated card (mp4) by default
@@ -1293,6 +1302,7 @@ async function main(argv) {
   if (cmd === "flow") return cmdFlow(rest);
   if (cmd === "handshake") return cmdHandshake(rest);
   if (cmd === "receipt") return cmdReceipt(rest);
+  if (cmd === "delegation") return cmdDelegation(rest);
 
   process.stderr.write(red(`unknown command: ${cmd}\n\n`) + USAGE);
   return 2;
@@ -1460,6 +1470,120 @@ function cmdReceipt(args) {
     return 0;
   }
   process.stderr.write(red(`receipt: unknown subcommand${sub ? ` '${sub}'` : ""} (sign|cosign|verify|history)\n`));
+  return 2;
+}
+
+// openagent delegation <mint|verify|revoke|attribute> — rotatable-root anchor
+// (DIVE-949). The keystore identity is the stable ROOT; it delegates day-to-day
+// signing to a rotatable LEAF via a self-contained signed statement, so a
+// receipt attributes to the root with NO central registry. Single-key receipts
+// with no delegation stay self-anchored (leaf == root) — nothing to break.
+function cmdDelegation(args) {
+  const dl = require("../lib/delegation");
+  const sub = args[0];
+  const rest = args.slice(1);
+  const flag = (n) => {
+    const i = rest.indexOf(n);
+    const v = i >= 0 ? rest[i + 1] : null;
+    return v && !String(v).startsWith("--") ? v : null;
+  };
+  const emit = (o) => process.stdout.write(JSON.stringify(o, null, 2) + "\n");
+  const firstFile = () => rest.find((a) => !a.startsWith("-"));
+  // Load statements from a file that is either a JSON array or JSONL (one
+  // statement per line) — the two shapes a feed or receipt bundle carries.
+  const loadStatements = (f) => {
+    if (!f) return [];
+    const raw = fs.readFileSync(f, "utf8").trim();
+    if (!raw) return [];
+    // A single JSON value first (a pretty-printed object, or an array of them)…
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      // …otherwise it's JSONL: one statement per line (a feed bundle).
+      return raw.split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+    }
+  };
+
+  if (sub === "mint") {
+    const leaf = flag("--leaf");
+    const notBefore = flag("--not-before");
+    if (!leaf || !notBefore) {
+      process.stderr.write(red("delegation mint: --leaf <did> and --not-before <iso8601> are required\n"));
+      return 2;
+    }
+    const kp = agentKeyOrExit();
+    try {
+      emit(dl.buildDelegation({
+        rootPrivateKey: kp.privateKey,
+        leafDid: leaf,
+        role: flag("--role"),
+        notBefore,
+        notAfter: flag("--not-after"), // omit → null (until revoked)
+      }));
+    } catch (e) {
+      process.stderr.write(red(`delegation mint: ${e.message}\n`));
+      return 2;
+    }
+    return 0;
+  }
+  if (sub === "revoke") {
+    const leaf = flag("--leaf");
+    if (!leaf) {
+      process.stderr.write(red("delegation revoke: --leaf <did> is required\n"));
+      return 2;
+    }
+    const kp = agentKeyOrExit();
+    try {
+      emit(dl.buildRevocation({
+        rootPrivateKey: kp.privateKey,
+        leafDid: leaf,
+        role: flag("--role"),
+        revokedAt: flag("--at") || new Date().toISOString(),
+      }));
+    } catch (e) {
+      process.stderr.write(red(`delegation revoke: ${e.message}\n`));
+      return 2;
+    }
+    return 0;
+  }
+  if (sub === "verify") {
+    const f = firstFile();
+    if (!f) {
+      process.stderr.write(red("delegation verify: a <delegation-file> is required\n"));
+      return 2;
+    }
+    let d;
+    try {
+      d = JSON.parse(fs.readFileSync(f, "utf8"));
+    } catch (e) {
+      process.stderr.write(red(`delegation verify: ${e.message}\n`));
+      return 2;
+    }
+    const r = d && d.typ === dl.REVOCATION_TYP ? dl.verifyRevocation(d) : dl.verifyDelegation(d);
+    emit(r);
+    return r.ok ? 0 : 1;
+  }
+  if (sub === "attribute") {
+    const f = firstFile();
+    if (!f) {
+      process.stderr.write(red("delegation attribute: a <receipt-file> is required (--delegations/--revocations optional)\n"));
+      return 2;
+    }
+    let co, delegations, revocations;
+    try {
+      co = JSON.parse(fs.readFileSync(f, "utf8"));
+      delegations = loadStatements(flag("--delegations"));
+      revocations = loadStatements(flag("--revocations"));
+    } catch (e) {
+      process.stderr.write(red(`delegation attribute: ${e.message}\n`));
+      return 2;
+    }
+    const r = dl.verifyReceiptAttribution(co, { delegations, revocations });
+    emit(r);
+    return r.ok ? 0 : 1;
+  }
+  process.stderr.write(red(`delegation: unknown subcommand${sub ? ` '${sub}'` : ""} (mint|verify|revoke|attribute)\n`));
   return 2;
 }
 

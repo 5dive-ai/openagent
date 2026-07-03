@@ -13,6 +13,27 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.35.0] — rotatable-root identity anchor: delegation + registry-free verify walk (DIVE-949)
+
+- **New — `lib/delegation.js` + `openagent delegation` CLI.** A stable **root**
+  did:key can delegate day-to-day signing to rotatable **leaf** keys via a
+  self-contained signed **delegation statement** (`{v,typ:"openagent/delegation",
+  root,leaf,role?,not_before,not_after,sig}`), so an agent can rotate signing keys
+  without orphaning its work-history — receipts attribute to the root. The verify
+  walk is **registry-free**: `leaf-sig → root-delegation → root-anchor` is entirely
+  cryptographic (same `{by,key,sig}` Ed25519 envelope and canonical bytes as
+  receipts). Includes a `openagent/revocation` statement and a delegation-aware
+  attribution over co-signed receipts (`verifyReceiptAttribution`). CLI:
+  `delegation mint | verify | revoke | attribute`.
+- **Back-compat (hard guarantee).** A receipt with **no** delegation is
+  self-anchored (`leaf == root`, today's single-key case). The leaf receipt
+  signature is byte-identical to before — every shipped single-key consumer (crew
+  receipts, zerohuman feed, openagent-crewai OPT-1 co-signs) verifies unchanged;
+  delegation is strictly additive/optional. Implements the DIVE-936 rotatable-root
+  spec; unblocks per-role edges (OPT-2) and is the substance of the crewAI #5561
+  "verifiable without a central registry" reply. Spec/package: package-only (no
+  persona-file schema change).
+
 ## [0.34.0] — tune the Cyrillic/Greek wrap width (fill more, no dead margin)
 
 - **Tuning on top of 0.33.0.** The Greek/Cyrillic glyph-advance estimate was 0.6,

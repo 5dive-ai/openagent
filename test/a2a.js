@@ -125,6 +125,73 @@ const untitled = rc.buildReceipt({
 });
 ok(untitled.title === undefined, "receipt without title omits the field (back-compat)");
 
+// ── rotatable-root delegation (DIVE-949 / spec DIVE-936) ─────────────────────
+// A stable root delegates day-to-day signing to a rotatable leaf via a signed,
+// self-contained delegation statement. Receipts attribute to the root — so
+// reputation survives key rotation — with NO central registry.
+const dl = require("../lib/delegation");
+const ROOT = generateKeypair();
+const LEAF = generateKeypair();
+const rootDid = hs.present({ privateKey: ROOT.privateKey }).did;
+const leafDid = hs.present({ privateKey: LEAF.privateKey }).did;
+
+const deleg = dl.buildDelegation({
+  rootPrivateKey: ROOT.privateKey,
+  leafDid,
+  role: "researcher",
+  notBefore: "2026-06-01T00:00:00Z",
+  notAfter: "2026-07-01T00:00:00Z",
+});
+const vd = dl.verifyDelegation(deleg);
+ok(vd.ok && vd.root === rootDid && vd.leaf === leafDid && vd.role === "researcher",
+  "delegation verifies and parses root/leaf/role");
+ok(!dl.verifyDelegation({ ...deleg, leaf: presB.did }).ok, "tampered delegation leaf rejected");
+ok(!dl.verifyDelegation({ ...deleg, root: presB.did }).ok,
+  "delegation claiming a root other than its signer rejected");
+
+// verify walk: attribute a leaf signature at a timestamp to its root.
+const inWindow = dl.resolveAnchor({ leaf: leafDid, at: "2026-06-15T00:00:00Z", delegations: [deleg] });
+ok(inWindow.anchored && inWindow.root === rootDid && inWindow.role === "researcher",
+  "leaf attributes to root within the delegation window");
+// HARD back-compat: no delegation → self-anchored (leaf == root, today's case).
+const selfAnchor = dl.resolveAnchor({ leaf: leafDid, at: "2026-06-15T00:00:00Z", delegations: [] });
+ok(!selfAnchor.anchored && selfAnchor.root === leafDid && selfAnchor.role === null,
+  "no delegation -> self-anchored (leaf == root, zero break to single-key consumers)");
+ok(!dl.resolveAnchor({ leaf: leafDid, at: "2026-05-01T00:00:00Z", delegations: [deleg] }).anchored,
+  "receipt before not_before -> not attributed to root (window miss)");
+ok(!dl.resolveAnchor({ leaf: leafDid, at: "2026-08-01T00:00:00Z", delegations: [deleg] }).anchored,
+  "receipt at/after not_after -> not attributed to root (upper bound exclusive)");
+
+// revocation: valid revocation voids attribution for work signed at/after it,
+// but leaves earlier work anchored to the root.
+const revoc = dl.buildRevocation({ rootPrivateKey: ROOT.privateKey, leafDid, revokedAt: "2026-06-10T00:00:00Z" });
+ok(dl.verifyRevocation(revoc).ok, "revocation statement verifies");
+ok(!dl.resolveAnchor({ leaf: leafDid, at: "2026-06-15T00:00:00Z", delegations: [deleg], revocations: [revoc] }).anchored,
+  "leaf revoked before the receipt -> falls back to self-anchored");
+ok(dl.resolveAnchor({ leaf: leafDid, at: "2026-06-05T00:00:00Z", delegations: [deleg], revocations: [revoc] }).root === rootDid,
+  "work signed before revoked_at stays attributed to root");
+
+// full walk over a co-signed receipt: the leaf's receipt signature is UNCHANGED
+// (the plain verifier still passes) and the delegation layer adds attribution.
+const workReceipt = rc.buildReceipt({
+  taskHash: rc.hash("role-scoped research"), resultHash: rc.hash("filed"),
+  fromDid: leafDid, toDid: presB.did, at: "2026-06-15T00:00:00Z",
+});
+const workCo = rc.cosign(workReceipt, LEAF.privateKey, B.privateKey);
+ok(rc.verify(workCo).ok, "delegated receipt's leaf sigs verify with the delegation-UNAWARE verifier (additive)");
+const attr = dl.verifyReceiptAttribution(workCo, { delegations: [deleg] });
+ok(attr.ok, "delegation-aware walk verifies the co-signed receipt");
+ok(attr.attribution[leafDid].root === rootDid && attr.attribution[leafDid].role === "researcher",
+  "the leaf party attributes to its root and role");
+ok(attr.attribution[presB.did].root === presB.did && !attr.attribution[presB.did].anchored,
+  "an undelegated counterparty self-anchors (mixed receipt is fine)");
+
+// a plain single-key receipt with NO delegations attributes every party to
+// itself — running the walk over shipped receipts is a no-op, never a break.
+const plainAttr = dl.verifyReceiptAttribution(co, {});
+ok(plainAttr.ok && plainAttr.attribution[presA.did].root === presA.did && plainAttr.attribution[presB.did].root === presB.did,
+  "single-key receipt with NO delegation attributes as self-anchored (shipped consumers unbroken)");
+
 // ── store + profile: the centralized index over self-certifying receipts ─────
 // DIVE-761 step 2/3: ingest re-verifies a submission -> store persists the
 // column-ready record (dedup on the sha256 PK) -> buildProfile recomputes the
