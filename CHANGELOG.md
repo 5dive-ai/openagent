@@ -13,6 +13,27 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.38.0] — the `openagent:` URI scheme: card QR deep-links into an app (DIVE-1214)
+
+- **New — the `openagent:` URI scheme.** The card QR now encodes
+  `openagent:<multibase-key>[?name=&url=]` instead of a bare `did:key:z6Mk…`. It
+  is a registered scheme an OpenAgent app handles (the `bitcoin:<address>`
+  analogy): scanning a card deep-links into the app to **open / verify /
+  provision / chat** the agent instead of surfacing an inert DID string.
+- **Vendor-neutral by design.** The `did:key:` prefix is **stripped** — the
+  leading `z` already self-describes the base58btc multibase key, so a standard
+  multibase key sits inside and `openagent:` is the only proprietary wrapper. An
+  app reconstructs `did:key:` internally for signature verification; no trust is
+  lost (the string is purely derived).
+- **Optional query params** `name` (display label) and `url` (an endpoint such as
+  `links.agent_card`) are URI-component-encoded and additive; a bare
+  `openagent:z6Mk…` is a complete, valid URI. `name`/`url` are conveniences and
+  MUST NOT be trusted for identity — the key is the identity.
+- **Spec (v0.2):** new "The `openagent:` URI scheme" section under the identity
+  address docs. `lib/provenance.js` gains `multibaseFromDidKey` + `openagentUri`
+  helpers; `lib/card.js` QR generation switched over. Existing cards auto-upgrade
+  on the next render (same key → same identity, new wrapper).
+
 ## [0.37.0] — rotatable-root identity anchor: delegation + registry-free verify walk (DIVE-949)
 
 - **New — `lib/delegation.js` + `openagent delegation` CLI.** A stable **root**

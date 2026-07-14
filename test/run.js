@@ -535,6 +535,16 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
     return Buffer.from(hex, "hex");
   })();
   check("did:key decodes to 0xed01 + 32 bytes", decoded.length === 34 && decoded[0] === 0xed && decoded[1] === 0x01);
+  // 8b-i. openagent: URI scheme (DIVE-1214) — openagent:<multibase-key>[?name=&url=].
+  const mb = provenance.multibaseFromDidKey(did); // strip "did:key:" -> z6Mk…
+  check("multibaseFromDidKey strips the did:key: prefix", mb === did.slice("did:key:".length) && mb.startsWith("z6Mk"));
+  check("openagent: bare URI is scheme + multibase key, no did:key: prefix",
+    provenance.openagentUri(did) === "openagent:" + mb && !provenance.openagentUri(did).includes("did:key:"));
+  const uriQ = provenance.openagentUri(did, { name: "Dave Smith", url: "https://x.io/a?b=c" });
+  check("openagent: URI encodes optional name & url query params",
+    uriQ === "openagent:" + mb + "?name=Dave%20Smith&url=" + encodeURIComponent("https://x.io/a?b=c"));
+  check("openagent: URI omits query string when no name/url", !provenance.openagentUri(did).includes("?"));
+  check("openagentUri returns null for an empty key", provenance.openagentUri("") === null);
   check("non-ed25519 input is rejected", (() => {
     try { provenance.didKeyFromPublicKey("not a key"); return false; } catch (_) { return true; }
   })());

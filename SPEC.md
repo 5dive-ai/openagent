@@ -109,6 +109,24 @@ This address is the agent's stable identity anchor:
 
 `openagent address <file>` prints the did:key for a persona's `created_by.key`; `openagent keygen` prints it for a freshly generated identity.
 
+#### The `openagent:` URI scheme (v0.2)
+
+A did:key is a *handle*; it is not something an app can act on. The **`openagent:` URI** is the actionable wrapper — a registered scheme an OpenAgent app claims, exactly as a wallet claims `bitcoin:`. Point a device at a card QR (or tap an `openagent:` link) and the OS hands it to the app, which can then **open, verify, provision, or chat** the agent. It is what turns a printed card from a picture into a doorway.
+
+The format is **locked**:
+
+```
+openagent:<multibase-key>[?name=<display-name>&url=<endpoint>]
+```
+
+- **`<multibase-key>`** — the persona's did:key with the `did:key:` prefix **stripped**, e.g. `z6Mk…`. The leading `z` is itself the [multibase](https://github.com/multiformats/multibase) base58btc marker, so the key remains fully self-describing without the DID-method wrapper. This keeps the URI **vendor-neutral**: a standard multibase key inside, the `openagent:` scheme as the only proprietary layer. An app reconstructs `did:key:` + `<multibase-key>` internally to run signature verification, so no trust is lost by dropping the prefix — the string is purely derived, like the did:key itself.
+- **`name`** *(optional)* — a display label (typically `persona.name`), URI-component-encoded, so the app can show who the card is for before it fetches anything.
+- **`url`** *(optional)* — an endpoint to reach the agent (e.g. its `links.agent_card`), URI-component-encoded. A deep-link target for open/provision/chat; when absent the app falls back to resolving the identity locally.
+
+Query params are **optional and additive** — a bare `openagent:z6Mk…` is a complete, valid URI. Unknown params MUST be ignored by consumers so the scheme can grow without breaking older apps. The multibase key is the only load-bearing part; `name`/`url` are conveniences and MUST NOT be trusted for identity (the key is the identity — verify against it).
+
+On the reference card, the top-right QR encodes this `openagent:` URI (built from the signed persona's did:key + `name` + `links.agent_card`/`links.url` when present). Unsigned personas carry no key, so they render without a QR.
+
 ### `org.verification` — did:web org affiliation (v0.2, optional)
 
 `provenance` proves *who an agent is*; it says nothing about *who it works for*. `org.name` alone is a free-text claim — anyone can stamp `5dive` on their card (that's exactly why validators warn on leftover placeholder org names). `org.verification` closes that gap with a **did:web** attestation, turning `org.name` from a self-claim into a **verified ORG badge**.
