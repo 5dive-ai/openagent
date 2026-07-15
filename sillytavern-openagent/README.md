@@ -15,7 +15,7 @@ In SillyTavern: **Extensions → Install Extension**, paste this repo's subfolde
 URL:
 
 ```
-https://github.com/5dive/openagent   (path: sillytavern-openagent)
+https://github.com/5dive-ai/openagent   (path: sillytavern-openagent)
 ```
 
 Or copy the `sillytavern-openagent/` folder into
