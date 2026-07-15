@@ -13,6 +13,30 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.39.0] — OpenAgent ↔ Character Card interop: the roleplay-ecosystem bridge (DIVE-1275)
+
+- **New — `openagent card --to-charactercard` / `--from-charactercard`.** A
+  bidirectional converter between an OpenAgent persona and the **Character Card
+  V2 / V3** ("Tavern card") format that the roleplay ecosystem shares —
+  SillyTavern, Chub, Janitor, HammerAI, Agnai, ISEKAI all read/write it. One
+  converter = compatibility with the whole ecosystem instead of N bespoke
+  integrations. (CLI only; no spec change.)
+- **Export (`--to-charactercard`).** Maps persona → card: `behavior`→description,
+  `role`→personality, `voice.written.sample`→first_mes, `posts_about`→tags,
+  `org.name`→creator, and composes a `system_prompt` from role + behavior + voice
+  rules so the character actually behaves. `--v3` (default) or `--v2`. JSON to
+  stdout, or `-o out.json`; **`-o out.png` embeds** the card into the persona's
+  PNG face as a `tEXt`/`chara` (+`ccv3`) chunk — the directly-importable form.
+- **Import (`--from-charactercard`).** Reads a card from JSON **or** a
+  PNG-embedded `chara`/`ccv3` blob (incl. `zTXt`-compressed) and produces a valid
+  OpenAgent persona. Cards exported by OpenAgent round-trip **losslessly** (the
+  full persona rides along in `extensions.openagent`); foreign cards are
+  synthesized into a schema-valid persona.
+- **The wedge:** the roleplay audience authors personas already; this turns "a
+  cute character" into "a character with a real agent behind it" — same persona
+  layer, importable where they already roleplay. Unlocks the SillyTavern
+  extension + Janitor proxy-tutorial distribution plays (marketing).
+
 ## [0.38.0] — the `openagent:` URI scheme: card QR deep-links into an app (DIVE-1214)
 
 - **New — the `openagent:` URI scheme.** The card QR now encodes

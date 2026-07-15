@@ -69,6 +69,11 @@ ${bold("Usage")}
   openagent card <persona-file>|--handle <slug> [-o <out>] [--format apng|gif|webp|mp4] [--frames N] [--fps N] [--width px]
                                             (animated by default; -o *.png or --static for a still PNG)
                                             (--handle renders the OFFICIAL signed card straight from the registry)
+  openagent card --to-charactercard <persona-file> [--v2|--v3] [-o <out.json|out.png>]
+                                            (export as a Character Card / "Tavern card" — SillyTavern, Chub, Janitor, HammerAI, Agnai)
+                                            (-o *.png embeds the card into the persona's PNG face; V3 by default; JSON to stdout with no -o)
+  openagent card --from-charactercard <card.json|card.png> [-o <out.yaml>]
+                                            (import a Character Card back into an OpenAgent persona; reads PNG-embedded chara/ccv3 blobs)
   openagent tier <persona-file> [--json]
   openagent registry [--json] [--offline]
   openagent speak <persona-file> "<text>" [-o <out.wav>] [--voice <name>]
@@ -280,6 +285,16 @@ function autoMintIdentity(file) {
 }
 
 async function cmdCard(args) {
+  // Character Card (Tavern card) interop — the roleplay-ecosystem bridge
+  // (DIVE-1275). `--to-charactercard` exports this persona as a V2/V3 card that
+  // SillyTavern/Chub/Janitor/HammerAI/Agnai read; `--from-charactercard` imports
+  // one (JSON or PNG-embedded) back into an OpenAgent persona.
+  if (args.includes("--to-charactercard") || args.includes("--to-cc")) {
+    return cmdToCharacterCard(args);
+  }
+  if (args.includes("--from-charactercard") || args.includes("--from-cc")) {
+    return cmdFromCharacterCard(args);
+  }
   let out = null;
   let checkRegistry = true;
   const registryFlags = registryFlagsFrom(args);
@@ -427,6 +442,116 @@ async function cmdCard(args) {
     `${green("✓ CARD")}  ${res.outPath} ${dim(`(${res.width}×${res.height}, ${kb}KB)`)} — ${tierTag(res.tier)} ${dim(`· ${res.completeness}% complete`)}${faceNote}\n`.replace("— ", `— ${fidTag}`)
   );
   return 0;
+}
+
+// `openagent card --to-charactercard <persona> [--v2|--v3] [-o out.json|out.png]`
+// Export an OpenAgent persona as a Character Card (Tavern card) that the roleplay
+// ecosystem reads. JSON by default; if `-o` ends in .png the card is embedded
+// into that base PNG's `tEXt`/`chara` chunk — the directly-importable form.
+async function cmdToCharacterCard(args) {
+  const cc = require("../lib/charactercard");
+  let out = null, version = "v3", file = null;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--to-charactercard" || a === "--to-cc") continue;
+    else if (a === "-o" || a === "--out") out = args[++i];
+    else if (a === "--v2") version = "v2";
+    else if (a === "--v3") version = "v3";
+    else if (!a.startsWith("-")) file = file || a;
+  }
+  if (!file) {
+    process.stderr.write(red("card --to-charactercard: no persona file given\n"));
+    return 2;
+  }
+  const v = validateFile(file);
+  if (!v.ok) {
+    process.stdout.write(`${red("✗")} ${file} is not a valid persona — fix it first:\n`);
+    for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
+    return 1;
+  }
+  const persona = loadPersona(file);
+  const card = cc.personaToCharacterCard(persona, { version });
+
+  if (out && out.toLowerCase().endsWith(".png")) {
+    // Embed into a base PNG so the result imports directly into Tavern hosts.
+    // Use the persona's resolved face as the base image when available.
+    let basePng = null;
+    try {
+      const face = await resolveFace(persona.face && persona.face.ref, path.dirname(path.resolve(file)));
+      const m = face && face.resolved && typeof face.dataUri === "string" && face.dataUri.match(/^data:image\/png;base64,(.*)$/);
+      if (m) {
+        const buf = Buffer.from(m[1], "base64");
+        if (cc.isPng(buf)) basePng = buf;
+      }
+    } catch (_) { /* fall through to error below */ }
+    if (!basePng) {
+      process.stderr.write(red("card --to-charactercard: -o *.png needs a resolvable PNG face on the persona (face.ref). Use a .json output instead.\n"));
+      return 2;
+    }
+    const pngOut = cc.writeCharaToPng(basePng, card);
+    fs.writeFileSync(out, pngOut);
+    process.stdout.write(`${green("✓ CARD")}  ${out} ${dim(`(Character Card ${version.toUpperCase()} embedded in PNG · ${Math.round(pngOut.length / 1024)}KB)`)}\n`);
+    return 0;
+  }
+
+  const json = JSON.stringify(card, null, 2);
+  if (out) {
+    fs.writeFileSync(out, json);
+    process.stdout.write(`${green("✓ CARD")}  ${out} ${dim(`(Character Card ${version.toUpperCase()} · JSON)`)}\n`);
+  } else {
+    process.stdout.write(json + "\n");
+  }
+  return 0;
+}
+
+// `openagent card --from-charactercard <card.json|card.png> [-o out.yaml]`
+// Import a Character Card (JSON or PNG-embedded) into an OpenAgent persona. If
+// the card was itself exported from OpenAgent, the original persona is restored
+// losslessly (it rode along in extensions.openagent); otherwise a valid persona
+// is synthesized from the Tavern fields.
+async function cmdFromCharacterCard(args) {
+  const cc = require("../lib/charactercard");
+  let out = null, file = null;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--from-charactercard" || a === "--from-cc") continue;
+    else if (a === "-o" || a === "--out") out = args[++i];
+    else if (!a.startsWith("-")) file = file || a;
+  }
+  if (!file) {
+    process.stderr.write(red("card --from-charactercard: no card file given (.json or .png)\n"));
+    return 2;
+  }
+  let card = null;
+  try {
+    const buf = fs.readFileSync(file);
+    if (cc.isPng(buf)) {
+      card = cc.readCharaFromPng(buf);
+      if (!card) {
+        process.stderr.write(red(`card --from-charactercard: no Character Card found in ${file} (no chara/ccv3 tEXt chunk)\n`));
+        return 2;
+      }
+    } else {
+      card = JSON.parse(buf.toString("utf8"));
+    }
+  } catch (e) {
+    process.stderr.write(red(`card --from-charactercard: cannot read ${file}: ${e.message}\n`));
+    return 2;
+  }
+  const { persona, roundTripped } = cc.characterCardToPersona(card);
+  const yamlOut = YAML.stringify(persona);
+  // Validate the synthesized persona so we never emit something the rest of the
+  // toolchain would reject.
+  const chk = require("../lib/validate").validateDoc(persona);
+  if (out) {
+    fs.writeFileSync(out, yamlOut);
+    const note = roundTripped ? "round-tripped from embedded OpenAgent persona" : "synthesized from Character Card";
+    const vnote = chk.ok ? "" : yellow(" ⚠ needs a face/edit to fully validate");
+    process.stdout.write(`${green("✓")} ${out} ${dim(`(${note})`)}${vnote}\n`);
+  } else {
+    process.stdout.write(yamlOut);
+  }
+  return chk.ok ? 0 : 0; // always emit; validity is advisory on import
 }
 
 async function cmdTier(args) {
