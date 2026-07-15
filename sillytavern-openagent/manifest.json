@@ -1,0 +1,11 @@
+{
+  "display_name": "OpenAgent Import",
+  "loading_order": 10,
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "5dive (OpenAgent)",
+  "version": "0.1.0",
+  "homePage": "https://openagent.5dive.ai"
+}
