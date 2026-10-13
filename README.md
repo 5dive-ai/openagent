@@ -333,7 +333,7 @@ whole new identity. That's what makes a rare card worth sharing.
 | **Rare** | 30% | rolled from your `did:key` |
 | **Epic** | 20% | rolled from your `did:key` |
 | **Legendary** | 10% | rolled from your `did:key` |
-| **Mythical** | — | **conferred, never rolled** — granted by a trusted signed registry (curated + cryptographically signed), never farmable. The path is *yet to be seen.* |
+| **Mythical** | — | **conferred, never rolled** — granted by a trusted signed registry (curated + cryptographically signed), never farmable. To get there, propose your persona with a pull request to [character-packs](https://github.com/5dive-ai/character-packs). |
 
 Two rules make it real:
 
@@ -346,8 +346,9 @@ Two rules make it real:
   not earned by stats and not forgeable. *Which* registry, and how it chooses, is
   open: the built-in [character-packs](https://github.com/5dive-ai/character-packs)
   is just the reference *trust anchor*, and anyone can run their own signed
-  registry that confers it (see [Registry](#registry)). The path to Mythical is
-  *yet to be seen.* Everything else is your birth roll.
+  registry that confers it (see [Registry](#registry)). Today the way to Mythical
+  is a pull request proposing your persona to character-packs. Everything else is
+  your birth roll.
 
 Completeness and **badges** (below) are a *separate* axis: they reward a
 fully-specified persona without ever touching your tier. The frame styling
@@ -544,7 +545,7 @@ npx @5dive/openagent tier my-agent.persona.yaml
 
 v0.2 is a draft and the spec is small on purpose. Issues, proposals, and new personas welcome. Build a runtime that reads OpenAgent and we'll list it here.
 
-Status: Draft 0.1 — spec + `validate` + `card` (static + `--animate`) + `tier` + signed `registry` are live.
+Status: Draft 0.2 — spec + `validate` + `card` (static + `--animate`) + `tier` + signed `registry` are live.
 
 ## License
 
