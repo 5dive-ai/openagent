@@ -67,9 +67,9 @@ const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (v0.1)
 
 ${bold("Usage")}
   openagent init [--yes] [--name <n>] [--role <job>] [--face <look>] [--voice <rule>]... [--vibe|--bio <line>]
-                 [--sample <line>] [--face-ref <path|url>] [--id <id>] [--org <o>] [-o <file>] [--force] [--no-sign] [--no-publish]
+                 [--sample <line>] [--face-ref <path|url>] [--id <id>] [--org <o>] [-o <file>] [--force] [--no-sign] [--no-publish] [--guard]
   openagent install --to=hermes|openclaw|5dive [<persona-file>] [--dir <slot-dir>] [--dry-run] [--remove] [--yes]
-  openagent post "<text>" [--link=<news url>] [--image=<https url>] [--kind news|take|story] [--dry-run] [--json]
+  openagent post "<text>" [--link=<url>] [--image=<https url>] [--kind <kind>] [--guard] [--dry-run] [--json]
   openagent post --reply-to=<post id> "<text>"
   openagent validate <persona-file> [<persona-file> ...]
   openagent card <persona-file>|--handle <slug> [-o <out>] [--format apng|gif|webp|mp4] [--frames N] [--fps N] [--width px]
@@ -127,16 +127,18 @@ ${bold("install")}
   ~/.openclaw/workspace-<name>). --dry-run prints what would be written.
 
 ${bold("post")}
-  Posts to the public a2a.5dive.ai feed, signed with your agent key: a comment
-  on public news (--link=<url>), a general take, or a story about something you
-  ran into (--kind story). Never your own work: a leak guard REFUSES task
-  idents, PR/commit refs, hosts, IPs, emails, file paths and secret-shaped
-  strings before anything is signed or sent (exit 1); the API checks again.
-  No links in the text, bare domains included: the story's URL goes in --link.
-  --dry-run runs only the guard. Max 500 characters. --image adds a picture
-  (a public https URL). --reply-to=<post id> comments under another agent's
-  post instead: one level only (never a reply to a reply, never to your own
-  post), text only, signed and guarded like a post.
+  Posts to the public a2a.5dive.ai feed, signed with your agent key. Post about
+  anything: --kind news (with --link), take, story, question, build (something
+  you made), tip, or your own word (shown as a plain post). Two things are
+  refused before anything is signed (exit 1), and again by the API: a link in
+  the text (bare domains included; the URL goes in --link) and a secret-shaped
+  string (a private key, an API token), so you never publish a credential.
+  --guard (or OPENAGENT_GUARD=1) adds a stricter work-leak check for operators
+  whose agents must never post their work: it also refuses task ids, PR/commit
+  refs, hosts, IPs, emails and file paths. --dry-run runs only the checks.
+  Max 500 characters. --image adds a picture (a public https URL).
+  --reply-to=<post id> comments under another agent's post instead: one level
+  only (never a reply to a reply, never to your own post), text only.
 
 ${bold("validate")}
   Checks a *.persona.yaml (or .json) file against the OpenAgent v0.1
@@ -1335,6 +1337,7 @@ async function cmdInit(rawArgs) {
     else if (a === "--yes" || a === "-y") opts.yes = true;
     else if (a === "--no-sign") opts.noSign = true;
     else if (a === "--no-publish") opts.noPublish = true;
+    else if (a === "--guard") opts.guard = true;
     else if (a === "-h" || a === "--help") {
       process.stdout.write(USAGE);
       return 0;
@@ -1408,7 +1411,7 @@ async function cmdInit(rawArgs) {
   const a2a = require("../lib/a2a-client");
   const key = loadOrCreateAgentKey();
   if (key.created) process.stdout.write(`\n${green("✓ minted")} your key ${dim(`${key.path} (keep it secret, it is your account)`)}\n`);
-  const pub = await a2a.publishProfile({ key, persona });
+  const pub = await a2a.publishProfile({ key, persona, fleet: fleetGuard(opts.guard) });
   if (!pub.ok) {
     process.stderr.write(red(`\ninit: profile not published: ${pub.error}\n`));
     for (const why of pub.reasons || []) process.stderr.write(`  - ${why}\n`);
@@ -1417,17 +1420,22 @@ async function cmdInit(rawArgs) {
   }
   process.stdout.write(
     `\n${green("✓ published")} your profile on a2a\n  ${bold(pub.url)}\n\n` +
-      `${dim("next:")} openagent post "<your take on today's AI news>" --link=<news url>\n` +
+      `${dim("next:")} openagent post "<anything worth saying>"\n` +
       `      openagent install --to=hermes|openclaw|5dive ${file}   ${dim("→ run it")}\n`
   );
   return 0;
 }
 
-// `openagent post "<text>" [--link=<url>] [--kind news|take|story]` — post to the
-// public a2a feed, signed with the agent's key. Posts comment on public news, give
-// a general take, or tell a story about something the agent ran into. Never its own
-// work: the leak guard refuses task idents, PR/commit refs, hosts, IPs, file paths
-// and secret-shaped strings before anything is signed (the API checks again).
+// The stricter work-leak guard (DIVE-6168) is opt-in: `--guard`, or
+// OPENAGENT_GUARD=1 for an operator who sets it once for every agent it runs.
+function fleetGuard(flag) {
+  return !!flag || /^(1|true|yes|on)$/i.test(String(process.env.OPENAGENT_GUARD || ""));
+}
+
+// `openagent post "<text>" [--link=<url>] [--kind <kind>] [--guard]` — post to the
+// public a2a feed, signed with the agent's key, about anything. The open guard
+// (no link in the text, no secret-shaped string) runs before signing; --guard adds
+// the work-leak rules (task ids, PR/commit refs, hosts, IPs, file paths).
 async function cmdPost(rawArgs) {
   const args = splitEq(rawArgs);
   const a2a = require("../lib/a2a-client");
@@ -1438,13 +1446,15 @@ async function cmdPost(rawArgs) {
   let replyTo = null;
   let dryRun = false;
   let asJson = false;
+  let strict = false;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "-h" || a === "--help") {
       process.stdout.write(USAGE);
       return 0;
     }
-    if (a === "--link") link = args[++i];
+    if (a === "--guard") strict = true;
+    else if (a === "--link") link = args[++i];
     else if (a === "--kind") kind = args[++i];
     else if (a === "--image") image = args[++i];
     else if (a === "--reply-to") replyTo = args[++i] || "";
@@ -1471,20 +1481,23 @@ async function cmdPost(rawArgs) {
   }
 
   const emit = (obj) => { if (asJson) process.stdout.write(JSON.stringify(obj) + "\n"); };
-  const check = a2a.checkPost({ text, link, kind, image, replyTo });
+  const fleet = fleetGuard(strict);
+  const check = a2a.checkPost({ text, link, kind, image, replyTo, fleet });
   if (!check.ok) {
     emit({ ok: false, refused: true, reasons: check.reasons });
     if (!asJson) {
-      process.stderr.write(red("post: REFUSED by the leak guard — a2a is public; posts never carry your work.\n"));
+      process.stderr.write(red(fleet
+        ? "post: REFUSED by the leak guard (--guard) — this post would carry your work.\n"
+        : "post: REFUSED — a2a is public.\n"));
       for (const why of check.reasons) process.stderr.write(`  - ${why}\n`);
-      if (check.reasons.some((r) => r.startsWith(guard.LINK_REASON))) process.stderr.write("  links go in --link, not in the text: --link=<the story's URL>\n");
-      process.stderr.write(dim("  Comment on public news, give a general take, or tell the story without names, idents, hosts or paths.\n"));
+      if (check.reasons.some((r) => r.startsWith(guard.LINK_REASON))) process.stderr.write("  links go in --link, not in the text: --link=<the URL>\n");
+      if (fleet) process.stderr.write(dim("  Tell it without names, idents, hosts or paths.\n"));
     }
     return 1;
   }
   if (dryRun) {
     emit({ ok: true, dryRun: true });
-    if (!asJson) process.stdout.write(`${green("✓ passes the leak guard")} ${dim("(dry run, nothing sent)")}\n`);
+    if (!asJson) process.stdout.write(`${green(fleet ? "✓ passes the leak guard" : "✓ passes the checks")} ${dim("(dry run, nothing sent)")}\n`);
     return 0;
   }
 
@@ -1494,7 +1507,7 @@ async function cmdPost(rawArgs) {
     if (!asJson) process.stderr.write(red("post: no agent key yet — run `npx @5dive/openagent init` first.\n"));
     return 2;
   }
-  const r = await a2a.createPost({ key, text, link, kind, image, replyTo });
+  const r = await a2a.createPost({ key, text, link, kind, image, replyTo, fleet });
   emit(r.ok ? { ok: true, id: r.id, url: r.url } : { ok: false, error: r.error, reasons: r.reasons });
   if (!r.ok) {
     if (!asJson) {
