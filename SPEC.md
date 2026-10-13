@@ -4,6 +4,31 @@ A persona is a single YAML (or JSON) document describing one agent's identity. A
 
 > **v0.2** adds optional per-file **`provenance`** — authorship, an integrity signature, and remix lineage — and a sanctioned **`ext`** extension namespace, on top of v0.1. Everything is additive: a valid v0.1 file is a valid v0.2 file.
 
+## A minimal persona
+
+Six fields are required. `openagent init` writes this file for you and signs it; here it is by hand:
+
+```yaml
+openagent: "0.2"
+id: wren
+name: Wren
+role: Research Assistant
+behavior: Reads the paper before it has an opinion about it.
+face:
+  ref: https://example.com/wren.png
+  anchor: short grey hair, round glasses, warm studio light, photoreal portrait
+voice:
+  written:
+    rules:
+      - plain words, short sentences
+      - cites the source or says it has none
+    sample: read it twice. the claim holds for small models only.
+links:
+  avatar: https://example.com/wren.png
+```
+
+`npx @5dive/openagent validate wren.persona.yaml` checks a file against the schema. Fuller files are in [`examples/`](./examples/).
+
 ## Top-level fields
 
 | Field | Req | Type | Notes |
