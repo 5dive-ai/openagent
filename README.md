@@ -9,7 +9,7 @@
 ![runs with npx](https://img.shields.io/badge/runs%20with-npx-success)
 ![CI ready](https://img.shields.io/badge/CI-ready-success)
 
-[Try it](#try-it-10-seconds) · [Idea](#the-idea) · [Validate](#validate) · [Card](#card) · [Tiers](#rarity-tiers) · [Registry](#registry) · [Runtime](#reference-runtime) · [Contribute](#contribute)
+[Run it](#make-an-agent-run-it-anywhere) · [Try it](#try-it-10-seconds) · [Idea](#the-idea) · [Validate](#validate) · [Card](#card) · [Tiers](#rarity-tiers) · [Registry](#registry) · [Runtime](#reference-runtime) · [Contribute](#contribute)
 
 <p>
   <img src="assets/holo-mythical.gif" alt="A Mythical card — holographic frame, in motion" width="300">
@@ -25,6 +25,42 @@
 </div>
 
 AI agents have personalities now, but nothing holds them together. A different face in every render. A different voice in every clip. A chat reply that reads nothing like the voiceover. OpenAgent fixes the consistency half: lock an agent's identity once, in one file, and reuse it across chat, renders, TTS, and your posting bot. Same face, same voice, same writing, everywhere.
+
+## Make an agent, run it anywhere
+
+On any machine with Node 18+, nothing installed first:
+
+```
+npx @5dive/openagent init
+```
+
+Five questions (name, job, face, voice, vibe). You get a signed
+`<id>.persona.yaml`, and the agent gets its own key at `~/.openagent/agent.key`.
+In a script, answer them with flags instead:
+
+```
+npx @5dive/openagent init --yes --name Quill --role "Release Archivist" --vibe "Keeps the changelog honest."
+```
+
+Then put it into the agent runtime you use:
+
+```
+npx @5dive/openagent install --to=hermes      # ~/.hermes/SOUL.md
+npx @5dive/openagent install --to=openclaw    # ~/.openclaw/workspace/AGENTS.md, SOUL.md, IDENTITY.md
+npx @5dive/openagent install --to=5dive       # run it 24/7 on a 5dive box
+```
+
+Start a new chat (`/new` in OpenClaw) and ask *"who are you?"*. It answers as
+Quill, not as the runtime's default assistant.
+
+`install` adds the persona **above** what the runtime already wrote and never
+overwrites it: Hermes ships a default persona in `SOUL.md`, and OpenClaw's first
+run writes its own workspace files. Run it again to replace the persona, or take
+it back out with `--remove`. `--dry-run` shows what would be written. With no
+file argument it uses the one `*.persona.yaml` in the current directory.
+
+These paths were measured, not guessed: a before/after *"who are you?"* probe on
+live Hermes and OpenClaw agents (the same map the 5dive CLI uses).
 
 ## Try it (10 seconds)
 
@@ -78,15 +114,15 @@ If you run more than one agent, or one agent across more than one surface (chat,
 Three ways to lower the barrier from "read the spec, hand-write YAML" to "answer
 a few questions / let your editor guide you / let CI catch mistakes":
 
-**1. Scaffold interactively.** `init` asks a handful of plain questions (name,
-role, voice, face) and writes a schema-valid `<id>.persona.yaml` you can render a
-card from immediately — then validates it and shows your tier + next rung:
+**1. Scaffold interactively.** `init` asks five plain questions (name, job,
+face, voice, vibe), writes a schema-valid `<id>.persona.yaml`, signs it with the
+agent's own key, then validates it and shows your tier + next rung:
 
 ```
 npx @5dive/openagent init
 ```
 
-Flags pre-fill answers for a faster path: `init --name Nova --role "Support Lead"`.
+Flags pre-fill answers; `--yes` asks nothing: `init --yes --name Nova --role "Support Lead"`.
 
 **2. Editor autocomplete + inline validation.** The schema is published for
 [SchemaStore](https://www.schemastore.org/) so editors auto-apply it to any

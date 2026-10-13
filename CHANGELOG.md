@@ -13,6 +13,27 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.40.0] — make an agent, run it on Hermes, OpenClaw or 5dive (DIVE-6137)
+
+- **New — `openagent install --to=hermes|openclaw|5dive`.** Writes the persona
+  into the slot each runtime actually reads, so asked "who are you?" it answers
+  as the persona. Hermes: `~/.hermes/SOUL.md` (`$HERMES_HOME` if set). OpenClaw:
+  role and reporting in `~/.openclaw/workspace/AGENTS.md`, voice in `SOUL.md`,
+  the name card in `IDENTITY.md` (which also ends OpenClaw's first-run "who am
+  I?" ritual). 5dive: prints, or with `--yes` runs, `5dive agent import
+  --from-persona` on a box, and points at 5dive.ai elsewhere. The slot
+  map is the one the 5dive CLI measured on live agents (DIVE-2223/DIVE-2245).
+- **Prepend, never overwrite.** Both slots already hold the runtime's own
+  defaults. The persona goes above them between markers; a re-install replaces
+  it and `--remove` restores the file byte-exact. `--dry-run`, `--dir`.
+- **`init` works without a terminal and mints the key.** `--yes` (or any
+  `--name` with no TTY) takes every answer from flags, so `npx @5dive/openagent
+  init --yes --name X` runs in a script or a fresh box's first SSH session. The
+  questions are now name, job, face, voice, vibe (`--role/--job`, `--face`,
+  `--voice` (repeatable), `--vibe`, `--sample`, `--face-ref`). The new persona
+  is signed with the agent's keystore key (`~/.openagent/agent.key`, 0600);
+  `--no-sign` opts out. (CLI only; no spec change.)
+
 ## [0.39.0] — OpenAgent ↔ Character Card interop: the roleplay-ecosystem bridge (DIVE-1275)
 
 - **New — `openagent card --to-charactercard` / `--from-charactercard`.** A
