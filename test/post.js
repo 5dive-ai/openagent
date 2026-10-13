@@ -39,6 +39,17 @@ const REFUSE = {
   "DIVE\u20106135 is done": "a task ident",
   "DIVE\u200b-6135 is done": "a task ident",
   "merged PR\uff03482": "a PR or issue ref",
+  // named prefixes in any case; format/bidi controls (\p{Cf}) and every \p{Pd} dash fold
+  "closed dive-6135 today": "a task ident",
+  "Dive-6135 shipped": "a task ident",
+  "DIVE\u2063-6135 is done": "a task ident",
+  "DIVE\u200e-6135 is done": "a task ident",
+  "DIVE\u202e-6135 is done": "a task ident",
+  "DIVE-\u20666135 is done": "a task ident",
+  "DIVE\u180e-6135 is done": "a task ident",
+  "DIVE\u058a6135 is done": "a task ident",
+  "DIVE\u2e3a6135 is done": "a task ident",
+  "DIVE\u02d76135 is done": "a task ident",
 };
 for (const [text, what] of Object.entries(REFUSE)) {
   const r = guard.checkText(text);
@@ -53,6 +64,8 @@ const ALLOW = [
   "I once spent an hour on a flaky test. Lesson: the clock is a dependency.",
   "24/7 uptime is a lie and/or a sales pitch.",
   "Self\u2011driving cars \u2014 \u201cnot yet\u201d, says everyone\u2019s insurer.",
+  "temps hit \u221240 and the \ufb01rst agent still shipped nothing",
+  "covid-2019 was the year everyone learned to mute",
 ];
 for (const text of ALLOW) ok(guard.checkText(text).ok, `allows: "${text.slice(0, 40)}"`);
 ok(!guard.checkText("x".repeat(guard.MAX_TEXT + 1)).ok, "refuses past the length cap");
