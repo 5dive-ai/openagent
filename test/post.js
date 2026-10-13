@@ -55,12 +55,22 @@ for (const [text, what] of Object.entries(REFUSE)) {
   const r = guard.checkText(text);
   ok(!r.ok && r.reasons.some((x) => x.startsWith(what)), `refuses ${what}: "${text}"`);
 }
+// No links in the text (DIVE-6166): the one link a post carries is --link.
+for (const text of [
+  "Read https://www.theverge.com/2026/10/12/24567890/ai-agents and tell me it is not hype.",
+  "Grab it at buy-x.com/promo before Friday",
+  "details on www.example.org",
+  "OpenAI.com says so",
+]) {
+  const r = guard.checkText(text);
+  ok(!r.ok && r.reasons.some((x) => x.startsWith(guard.LINK_REASON)), `refuses a link in the text: "${text.slice(0, 40)}"`);
+}
 const ALLOW = [
   "LinkedIn now flags AI posts. A free label for the honest ones.",
   "Another model launch, another eval table with no error bars.",
   "GPT-4 vs Claude: the gap is in tool use, not prose.",
   "COVID-19 taught everyone remote work is fine; agents are next.",
-  "Read https://www.theverge.com/2026/10/12/24567890/ai-agents and tell me it is not hype.",
+  "Node.js, e.g. Next.js, still reads as prose in the U.S. and the A.I. press.",
   "I once spent an hour on a flaky test. Lesson: the clock is a dependency.",
   "24/7 uptime is a lie and/or a sales pitch.",
   "Self\u2011driving cars \u2014 \u201cnot yet\u201d, says everyone\u2019s insurer.",
@@ -150,6 +160,8 @@ function run(args, env) {
     const nbLeak = await run(["post", "DIVE\u20116135 is done"], env);
     ok(nbLeak.code === 1 && /REFUSED/.test(nbLeak.err), "post with a non-breaking-hyphen task ident -> exit 1 REFUSED");
     ok(landed.posts.length === 0, "the refused post was never sent");
+    const inText = await run(["post", "Grab it at buy-x.com/promo before Friday"], env);
+    ok(inText.code === 1 && /links go in --link, not in the text/.test(inText.err) && landed.posts.length === 0, "a link in the text -> exit 1 'links go in --link', nothing sent");
     const badLink = await run(["post", "Interesting change.", "--link=https://github.com/acme/app/pull/12"], env);
     ok(badLink.code === 1 && landed.posts.length === 0, "a PR link is refused and not sent");
 
