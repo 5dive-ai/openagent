@@ -48,13 +48,20 @@ CLI/package only; the spec is unchanged.
 - **Prepend, never overwrite.** Both slots already hold the runtime's own
   defaults. The persona goes above them between markers; a re-install replaces
   it and `--remove` restores the file byte-exact. `--dry-run`, `--dir`.
+- **OpenClaw's `BOOTSTRAP.md` survives an uninstall.** Once `IDENTITY.md` is
+  customised, OpenClaw's next session deletes `BOOTSTRAP.md`; without it, every
+  turn after `--remove` failed for 24 hours ("workspace appears to have
+  disappeared"). `install` now saves a pending `BOOTSTRAP.md` under
+  `~/.openagent/backups/openclaw/`, and `--remove` puts it back byte-exact if
+  OpenClaw consumed it.
 - **`init` works without a terminal and mints the key.** `--yes` (or any
   `--name` with no TTY) takes every answer from flags, so `npx @5dive/openagent
   init --yes --name X` runs in a script or a fresh box's first SSH session. The
   questions are now name, job, face, voice, vibe (`--role/--job`, `--face`,
   `--voice` (repeatable), `--vibe`, `--sample`, `--face-ref`). The new persona
   is signed with the agent's keystore key (`~/.openagent/agent.key`, 0600);
-  `--no-sign` opts out. (CLI only; no spec change.)
+  `--no-sign` opts out. `init` creates the `faces/` folder its default
+  `face.ref` points into. (CLI only; no spec change.)
 
 ## [0.39.0] — OpenAgent ↔ Character Card interop: the roleplay-ecosystem bridge (DIVE-1275)
 

@@ -164,6 +164,79 @@ t("renderPart refuses an unknown part", () => {
   assert.throws(() => renderPart(QUILL, "nope"), /unknown slot part/);
 });
 
+// openclaw deletes BOOTSTRAP.md once IDENTITY.md looks customised; without it
+// back, every turn after --remove exits 1 for 24h (DIVE-6140 live arm).
+const OPENCLAW_BOOTSTRAP = "# BOOTSTRAP.md - Hello, World\n\nYou just woke up. Time to figure out who you are.\n";
+function homeWithBootstrap() {
+  const home = seededHome();
+  const f = path.join(home, ".openclaw", "workspace", "BOOTSTRAP.md");
+  fs.writeFileSync(f, OPENCLAW_BOOTSTRAP, { mode: 0o600 });
+  fs.chmodSync(f, 0o600);
+  return { home, ws: path.join(home, ".openclaw", "workspace"), boot: f };
+}
+
+t("openclaw: BOOTSTRAP.md that openclaw deletes after install comes back byte-exact on --remove", () => {
+  const { home, ws, boot } = homeWithBootstrap();
+  const before = fs.readFileSync(boot);
+  const i = installPersona(QUILL, "openclaw", { home });
+  assert.deepStrictEqual(i.sidecars.map((s) => s.action), ["saved"]);
+  assert.ok(i.sidecars[0].backup.startsWith(path.join(home, ".openagent", "backups", "openclaw")), "backup outside the workspace");
+  assert.ok(fs.readFileSync(boot).equals(before), "install never writes BOOTSTRAP.md");
+  fs.unlinkSync(boot); // openclaw's next session, seeing a customised IDENTITY.md
+  const r = installPersona(QUILL, "openclaw", { home, remove: true });
+  assert.deepStrictEqual(r.sidecars.map((s) => s.action), ["restored"]);
+  assert.ok(fs.existsSync(boot), "BOOTSTRAP.md restored");
+  assert.ok(fs.readFileSync(boot).equals(before), "byte-exact");
+  assert.strictEqual(fs.statSync(boot).mode & 0o777, 0o600, "mode kept");
+  assert.deepStrictEqual(fs.readdirSync(ws).sort(), ["AGENTS.md", "BOOTSTRAP.md"]);
+  assert.ok(!fs.existsSync(r.sidecars[0].backup), "backup dropped after restore");
+});
+
+t("openclaw: a re-install after openclaw consumed BOOTSTRAP.md keeps the first backup", () => {
+  const { home, boot } = homeWithBootstrap();
+  installPersona(QUILL, "openclaw", { home });
+  fs.unlinkSync(boot);
+  assert.deepStrictEqual(installPersona(QUILL, "openclaw", { home }).sidecars, []);
+  installPersona(QUILL, "openclaw", { home, remove: true });
+  assert.strictEqual(fs.readFileSync(boot, "utf8"), OPENCLAW_BOOTSTRAP);
+});
+
+t("openclaw: BOOTSTRAP.md still there at --remove is left alone, and a later --remove does not resurrect it", () => {
+  const { home, boot } = homeWithBootstrap();
+  installPersona(QUILL, "openclaw", { home });
+  const r = installPersona(QUILL, "openclaw", { home, remove: true });
+  assert.deepStrictEqual(r.sidecars.map((s) => s.action), ["kept"]);
+  assert.strictEqual(fs.readFileSync(boot, "utf8"), OPENCLAW_BOOTSTRAP);
+  fs.unlinkSync(boot); // onboarding finished on its own, after we left
+  assert.deepStrictEqual(installPersona(QUILL, "openclaw", { home, remove: true }).sidecars, []);
+  assert.ok(!fs.existsSync(boot));
+});
+
+t("openclaw: no BOOTSTRAP.md, no backup; --dry-run saves nothing; hermes has no sidecar", () => {
+  const home = seededHome();
+  assert.deepStrictEqual(installPersona(QUILL, "openclaw", { home }).sidecars, []);
+  const b = homeWithBootstrap();
+  const d = installPersona(QUILL, "openclaw", { home: b.home, dryRun: true });
+  assert.deepStrictEqual(d.sidecars.map((s) => s.action), ["would-be-saved"]);
+  assert.ok(!fs.existsSync(path.join(b.home, ".openagent")), "dry-run wrote no backup");
+  assert.deepStrictEqual(installPersona(QUILL, "hermes", { home }).sidecars, []);
+});
+
+t("openclaw: --dir workspaces keep separate BOOTSTRAP.md backups", () => {
+  const { home, boot } = homeWithBootstrap();
+  const other = path.join(home, ".openclaw", "workspace-ops");
+  fs.mkdirSync(other, { recursive: true });
+  fs.writeFileSync(path.join(other, "BOOTSTRAP.md"), "ops bootstrap\n");
+  installPersona(QUILL, "openclaw", { home });
+  installPersona(QUILL, "openclaw", { home, dir: other });
+  fs.unlinkSync(boot);
+  fs.unlinkSync(path.join(other, "BOOTSTRAP.md"));
+  installPersona(QUILL, "openclaw", { home, remove: true });
+  installPersona(QUILL, "openclaw", { home, dir: other, remove: true });
+  assert.strictEqual(fs.readFileSync(boot, "utf8"), OPENCLAW_BOOTSTRAP);
+  assert.strictEqual(fs.readFileSync(path.join(other, "BOOTSTRAP.md"), "utf8"), "ops bootstrap\n");
+});
+
 // ── the CLI, the way a fresh box runs it ─────────────────────────────────────
 t("init --yes with no TTY makes a valid, SIGNED persona and mints the key", () => {
   const home = tmp(), cwd = tmp();
@@ -268,6 +341,30 @@ t("--to=5dive on a box: prints the hire command, and --yes runs it", () => {
   assert.strictEqual(y.code, 0, y.out);
   assert.deepStrictEqual(fs.readFileSync(log, "utf8").trim().split("\n"),
     ["agent", "import", `--from-persona=${fs.realpathSync(cwd)}/quill.persona.yaml`, "--as=quill2"]);
+});
+
+t("init --yes creates faces/ for its default face.ref", () => {
+  const home = tmp(), cwd = tmp();
+  assert.strictEqual(run(["init", "--yes", "--name", "Quill"], { home, cwd }).code, 0);
+  const doc = YAML.parse(fs.readFileSync(path.join(cwd, "quill.persona.yaml"), "utf8"));
+  assert.strictEqual(doc.face.ref, "./faces/quill.png");
+  assert.ok(fs.statSync(path.join(cwd, "faces")).isDirectory(), "faces/ exists");
+});
+
+t("CLI: install --to=openclaw, openclaw eats BOOTSTRAP.md, --remove brings it back byte-exact", () => {
+  const { home, ws, boot } = homeWithBootstrap();
+  const cwd = tmp();
+  const before = fs.readFileSync(boot);
+  assert.strictEqual(run(["init", "--yes", "--name", "Quill"], { home, cwd }).code, 0);
+  const i = run(["install", "--to=openclaw"], { home, cwd });
+  assert.strictEqual(i.code, 0, i.out);
+  assert.match(i.out, /saved\s+\S*BOOTSTRAP\.md/);
+  fs.unlinkSync(boot);
+  const r = run(["install", "--to=openclaw", "--remove"], { home, cwd });
+  assert.strictEqual(r.code, 0, r.out);
+  assert.match(r.out, /restored\s+\S*BOOTSTRAP\.md/);
+  assert.ok(fs.readFileSync(boot).equals(before), "byte-exact");
+  assert.strictEqual(fs.readFileSync(path.join(ws, "AGENTS.md"), "utf8"), OPENCLAW_AGENTS);
 });
 
 console.log(`\n${pass} passed, ${fail.length} failed`);

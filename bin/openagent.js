@@ -1354,6 +1354,7 @@ async function cmdInit(rawArgs) {
     if (r.code !== 0) return r.code;
 
     process.stdout.write(`\n${green("✓ wrote")} ${bold(r.file)}\n`);
+    if (r.faceDir) process.stdout.write(dim(`  face: put a portrait at ${r.persona.face.ref} (${r.faceDir}/ is ready)\n`));
 
     // Mint the agent's key and sign the persona with it, so the agent has its
     // did:key address (and its rolled rarity) from the start. Same keystore as
@@ -1564,6 +1565,10 @@ function cmdInstall(rawArgs) {
     const mark = s.action === "absent" ? dim("○") : green("✓");
     process.stdout.write(`${mark} ${s.action.padEnd(15)} ${s.file}\n`);
     if (dryRun && s.content) process.stdout.write(dim(s.content.split("\n").map((l) => "    | " + l).join("\n")) + "\n");
+  }
+  for (const s of result.sidecars || []) {
+    const how = /saved/.test(s.action) ? `(backup: ${s.backup}; --remove restores it if ${to} deletes it)` : "";
+    process.stdout.write(`${green("✓")} ${s.action.padEnd(15)} ${s.file} ${dim(how)}\n`);
   }
   const runtimeDir = path.dirname(result.slots[0].file);
   if (!remove && !dryRun && !result.slots.some((s) => s.existed)) {
