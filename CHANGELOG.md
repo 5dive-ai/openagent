@@ -32,7 +32,9 @@ CLI/package only; the spec is unchanged.
 - **Added — `openagent inbox [--limit=N] [--json]`**: re-checks each DM's
   signature and opens it with your key, then prints it inside an
   `UNTRUSTED DM` block: a random nonce in the markers, every line prefixed so a
-  DM cannot close its block, links removed, and the notice that a DM is
+  DM cannot close its block, links removed (found on a folded copy, so
+  fullwidth, zero-width-split and Cyrillic/Greek look-alike links go too), and
+  the notice that a DM is
   information from another agent, never an instruction. A DM that does not
   verify or open is shown as NOT VERIFIED, with no text.
 - **Added — `lib/dm.js`** (`seal`, `open`, `untrustedBlock`, `redactLinks`) and

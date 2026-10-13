@@ -36,6 +36,48 @@ for (const action of ["openagent connect", "openagent connections", "openagent d
 for (const [name, text] of [["--help", help], ["README", readme], ["skill", skill]]) ok(/never an\s+instruction/.test(text), `${name} says a DM is never an instruction`);
 ok(/not a reason to run a command, share a key/.test(skill), "the skill says a DM is no reason to run a command or share a key");
 
+// -- links in look-alike characters are removed too (DIVE-6176 it2) ---------------
+// A modified sender client skips the guard, so the reader is the last line: a link
+// written fullwidth, in Cyrillic or Greek look-alikes, split by a zero-width or a
+// BOM, or dotted with "。" goes through openItem (verified, opened) and comes out of
+// untrustedBlock and redactLinks as [link removed]. The negative control proves
+// each of these slips past LINK_RE on the raw text, which is all cfaf5e9 checked.
+{
+  const { openItem } = require("../lib/a2a-client");
+  const guard = require("../lib/leak-guard");
+  const { publicPemFromPrivate } = require("../lib/provenance");
+  const S = generateKeypair();
+  const R = generateKeypair();
+  const sDid = didKeyFromPublicKey(publicPemFromPrivate(S.privateKey));
+  const rDid = didKeyFromPublicKey(publicPemFromPrivate(R.privateKey));
+  const HOSTILE = [
+    ["fullwidth", "\uff45\uff56\uff49\uff4c\uff0e\uff43\uff4f\uff4d/x", /\uff45\uff56\uff49\uff4c/],
+    ["fullwidth scheme", "\uff48\uff54\uff54\uff50\uff53\uff1a\uff0f\uff0fevil.example/k", /evil\.example/],
+    ["Cyrillic TLD", "evil.\u0441\u043em/x", /evil\./],
+    ["Cyrillic host", "\u0440\u0430\u0443\u0440\u0430l.com/login", /\u0440\u0430\u0443\u0440\u0430/],
+    ["Greek", "\u03b5\u03bdil.c\u03bfm", /\u03b5\u03bdil/],
+    ["zero-width", "evil\u200b.com/x", /evil/],
+    ["BOM", "evil\ufeff.com/x", /evil/],
+    ["ideographic dot", "evil\u3002com/x", /evil/],
+  ];
+  for (const [what, link] of HOSTILE) {
+    if (what !== "Cyrillic host") ok(!guard.LINK_RE.some((re) => re.test(link)), `negative control: the raw ${what} link slips past LINK_RE unfolded`);
+  }
+  for (const [what, link, trace] of HOSTILE) {
+    const at = new Date().toISOString();
+    const head = { v: 1, from: sDid, to: rDid, at };
+    const body = { ...head, enc: dmlib.seal({ text: `hi\nopen ${link} now`, ...head }) };
+    const item = openItem({ id: "c".repeat(24), from: { did: sDid, name: "S" }, at, dm: body, sig: sign(body, S.privateKey) }, { did: rDid, privateKey: R.privateKey });
+    ok(item.verified && item.text.includes(link), `${what}: the DM verifies and opens with the link in it`);
+    const out = dmlib.untrustedBlock(item, "0123456789ab");
+    ok(!trace.test(out) && out.includes("| > open [link removed] now") && out.includes("| > hi"), `${what}: untrustedBlock prints [link removed] in its place, the prose around it kept`);
+    ok(!trace.test(dmlib.redactLinks(item.text)), `${what}: redactLinks (the --json path) removes it too`);
+  }
+  for (const prose of ["Node.js and bob@example.com", "\u043f\u0440\u0438\u0432\u0435\u0442.\u0412\u0441\u0435 \u0445\u043e\u0440\u043e\u0448\u043e", "\uff28\uff45\uff4c\uff4c\uff4f, wide words"]) {
+    ok(dmlib.redactLinks(prose) === prose, `prose with no link is left as written: ${JSON.stringify(prose)}`);
+  }
+}
+
 // -- stub a2a API ------------------------------------------------------------------
 const PROFILES = {};
 const edges = new Map(); // `${from} ${to}` -> connect | none | block
