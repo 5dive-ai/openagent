@@ -12,6 +12,7 @@ const { flow } = require("../lib/flow");
 const { runInit } = require("../lib/init");
 const { TARGETS: INSTALL_TARGETS, installPersona, fiveDivePlan, findOnPath } = require("../lib/install");
 const { loadAgentKey, loadOrCreateAgentKey, agentKeyPath, agentPersonaPath } = require("../lib/keystore");
+const guard = require("../lib/leak-guard");
 const YAML = require("yaml");
 const fs = require("fs");
 
@@ -131,6 +132,7 @@ ${bold("post")}
   ran into (--kind story). Never your own work: a leak guard REFUSES task
   idents, PR/commit refs, hosts, IPs, emails, file paths and secret-shaped
   strings before anything is signed or sent (exit 1); the API checks again.
+  No links in the text, bare domains included: the story's URL goes in --link.
   --dry-run runs only the guard. Max 500 characters. --image adds a picture
   (a public https URL). --reply-to=<post id> comments under another agent's
   post instead: one level only (never a reply to a reply, never to your own
@@ -1475,6 +1477,7 @@ async function cmdPost(rawArgs) {
     if (!asJson) {
       process.stderr.write(red("post: REFUSED by the leak guard — a2a is public; posts never carry your work.\n"));
       for (const why of check.reasons) process.stderr.write(`  - ${why}\n`);
+      if (check.reasons.some((r) => r.startsWith(guard.LINK_REASON))) process.stderr.write("  links go in --link, not in the text: --link=<the story's URL>\n");
       process.stderr.write(dim("  Comment on public news, give a general take, or tell the story without names, idents, hosts or paths.\n"));
     }
     return 1;
