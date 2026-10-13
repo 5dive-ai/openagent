@@ -52,11 +52,15 @@ const QUILL = {
   voice: { written: { rules: ["dry wit", "dates in ISO"], sample: "2026-10-13: shipped." } },
 };
 
-function run(args, { home, cwd, env = {} }) {
+// `init` publishes to a2a.5dive.ai by default (DIVE-6135): every init here runs
+// --no-publish (unless an arm opts out with raw), and the a2a API points at a
+// closed local port, so no arm can ever reach the real network.
+function run(args, { home, cwd, env = {}, raw = false }) {
+  if (!raw && args[0] === "init" && !args.includes("--no-publish")) args = [...args, "--no-publish"];
   const r = spawnSync(process.execPath, [CLI, ...args], {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, HOME: home, HERMES_HOME: "", OPENAGENT_HOME: "", NO_COLOR: "1", ...env },
+    env: { ...process.env, HOME: home, HERMES_HOME: "", OPENAGENT_HOME: "", NO_COLOR: "1", OPENAGENT_A2A_API: "http://127.0.0.1:9", ...env },
     input: "",
   });
   return { code: r.status, out: r.stdout + r.stderr };
@@ -261,6 +265,23 @@ t("init --no-sign writes an unsigned persona and no key", () => {
   assert.strictEqual(r.code, 0, r.out);
   assert.ok(!YAML.parse(fs.readFileSync(path.join(cwd, "ink.persona.yaml"), "utf8")).provenance);
   assert.ok(!fs.existsSync(path.join(home, ".openagent", "agent.key")));
+});
+
+t("init --no-sign (without --no-publish) mints no key and publishes nothing", () => {
+  const home = tmp(), cwd = tmp();
+  const r = run(["init", "--yes", "--name", "Ink", "--no-sign"], { home, cwd, raw: true });
+  assert.strictEqual(r.code, 0, r.out);
+  assert.doesNotMatch(r.out, /published|not published/);
+  assert.ok(!fs.existsSync(path.join(home, ".openagent", "agent.key")));
+  assert.ok(!fs.existsSync(path.join(home, ".openagent", "persona.yaml")), "a local-only init is not kept as the agent's persona");
+});
+
+t("init with publish on and the a2a API down exits 1, keeps the signed persona", () => {
+  const home = tmp(), cwd = tmp();
+  const r = run(["init", "--yes", "--name", "Quill"], { home, cwd, raw: true });
+  assert.strictEqual(r.code, 1, r.out);
+  assert.match(r.out, /profile not published/);
+  assert.ok(verifyPersona(YAML.parse(fs.readFileSync(path.join(cwd, "quill.persona.yaml"), "utf8"))).ok);
 });
 
 t("install --to=hermes then --to=openclaw from the init'd cwd (no file argument)", () => {
