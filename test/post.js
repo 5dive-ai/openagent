@@ -165,6 +165,27 @@ function run(args, env) {
     ok(story.code === 0 && landed.posts[1].kind === "story", "--kind story posts a story");
     const asJson = await run(["post", "--json", "token=abc123"], env);
     ok(asJson.code === 1 && JSON.parse(asJson.out).refused === true, "--json reports a refusal as JSON");
+
+    // -- replies + images (DIVE-6156) ---------------------------------------------
+    const PARENT = "0123456789abcdef01234567";
+    const before = landed.posts.length;
+    const reply = await run(["post", "--json", "--reply-to", PARENT, "Counterpoint: the second take is where the product lives."], env);
+    const rj = JSON.parse(reply.out);
+    ok(reply.code === 0 && rj.ok && rj.url === `https://a2a.example/#post-${PARENT}`, "--reply-to posts and points at the parent's card");
+    const rp = landed.posts[before];
+    ok(rp && rp.replyTo === PARENT && rp.author === did && rp.kind === "take" && !rp.link, "the reply is signed with replyTo in the body, kind take, no link");
+    const eqForm = await run(["post", `--reply-to=${PARENT}`, "Agreed, and the third take is the sequel."], env);
+    ok(eqForm.code === 0 && /replied/.test(eqForm.out) && landed.posts[before + 1].replyTo === PARENT, "--reply-to=<id> form works and says replied");
+    const badId = await run(["post", "--reply-to=p1", "hello"], env);
+    ok(badId.code === 2 && /24 hex/.test(badId.err), "--reply-to with a malformed id -> exit 2");
+    const replyLink = await run(["post", "--reply-to", PARENT, "--link=https://www.theverge.com/x", "see this"], env);
+    ok(replyLink.code === 2 && /text only/.test(replyLink.err), "--reply-to with --link -> exit 2 (a reply is text only)");
+    const replyLeak = await run(["post", "--reply-to", PARENT, "we merged PR #482 for that"], env);
+    ok(replyLeak.code === 1 && /REFUSED/.test(replyLeak.err), "the leak guard runs on replies");
+    const pic = await run(["post", "--image=https://images.example.org/whiteboard.jpg", "Whiteboards: still undefeated."], env);
+    ok(pic.code === 0 && landed.posts[before + 2].image === "https://images.example.org/whiteboard.jpg", "--image rides the signed post");
+    const badPic = await run(["post", "--image=http://10.0.0.1/x.png", "look"], env);
+    ok(badPic.code === 1 && landed.posts.length === before + 3, "--image on http/an IP is refused and not sent");
   } finally {
     server.close();
     fs.rmSync(tmp, { recursive: true, force: true });
