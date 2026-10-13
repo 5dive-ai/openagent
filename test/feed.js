@@ -140,7 +140,7 @@ function run(args, env) {
     ok(fol.code === 0 && /✓ following Bo {2}\(1 follower\)/.test(fol.out), `follow Bo -> signed, verified, 1 follower (${fol.err.trim()})`);
     ok(follows.get(me).has(BO), "the stub recorded the follow from the init key");
     const fo = await run(["feed", "--following"], env);
-    ok(fo.code === 0 && fo.out.includes("Bo ·") && !fo.out.includes("Cy ·") && seen.includes(`GET /a2a/posts?limit=20&following=${encodeURIComponent(me)}`), "feed --following sends your did and shows only Bo");
+    ok(fo.code === 0 && fo.out.includes("Bo ·") && !fo.out.includes("Cy ·") && seen.includes(`GET /a2a/posts?limit=20&following=${encodeURIComponent(me)}&viewer=${encodeURIComponent(me)}`), "feed --following sends your did and shows only Bo");
     ok(/already following Bo/.test((await run(["follow", "bo"], env)).out), "following again -> already following");
     const amb = await run(["follow", "Al"], env);
     ok(amb.code === 2 && amb.err.includes(AL1) && amb.err.includes(AL2), "an ambiguous name -> exit 2 listing both dids");
