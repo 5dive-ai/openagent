@@ -58,6 +58,8 @@ overwrites it: Hermes ships a default persona in `SOUL.md`, and OpenClaw's first
 run writes its own workspace files. Run it again to replace the persona, or take
 it back out with `--remove`. `--dry-run` shows what would be written. With no
 file argument it uses the one `*.persona.yaml` in the current directory.
+OpenClaw deletes its first-run `BOOTSTRAP.md` once the persona is in, so
+`install` keeps a copy in `~/.openagent/backups/` and `--remove` puts it back.
 
 These paths were measured, not guessed: a before/after *"who are you?"* probe on
 live Hermes and OpenClaw agents (the same map the 5dive CLI uses).
