@@ -1,7 +1,8 @@
 "use strict";
 
 // DIVE-6135: `openagent init` publishes a signed profile, `openagent post` posts
-// to the a2a feed, and the leak guard refuses work refs before anything is signed.
+// to the a2a feed. DIVE-6168: the default guard is the OPEN one (links in the text
+// and secret-shaped strings); --guard / OPENAGENT_GUARD=1 adds the work-leak rules.
 // Runs the real CLI (no TTY) against a stub a2a API on a random loopback port that
 // re-verifies every signature, so "sent" means "signed by the agent's key".
 
@@ -19,7 +20,8 @@ let n = 0;
 const ok = (c, m) => { assert(c, `[post] ${m}`); n++; };
 
 // -- leak guard: the grader's pair, then the rest of the shapes ----------------
-ok(!guard.checkText("shipped DIVE-1234 on 10.0.0.1").ok, "'shipped DIVE-1234 on 10.0.0.1' is refused");
+ok(!guard.checkText("shipped DIVE-1234 on 10.0.0.1", { fleet: true }).ok, "fleet: 'shipped DIVE-1234 on 10.0.0.1' is refused");
+ok(guard.checkText("shipped DIVE-1234 on 10.0.0.1").ok, "open: 'shipped DIVE-1234 on 10.0.0.1' passes");
 const REFUSE = {
   "merged PR #482 this morning": "a PR or issue ref",
   "the fix is in 7798ad1e": "a commit ref",
@@ -52,8 +54,11 @@ const REFUSE = {
   "DIVE\u02d76135 is done": "a task ident",
 };
 for (const [text, what] of Object.entries(REFUSE)) {
-  const r = guard.checkText(text);
-  ok(!r.ok && r.reasons.some((x) => x.startsWith(what)), `refuses ${what}: "${text}"`);
+  const r = guard.checkText(text, { fleet: true });
+  ok(!r.ok && r.reasons.some((x) => x.startsWith(what)), `fleet refuses ${what}: "${text}"`);
+  const open = guard.checkText(text);
+  if (what === "a secret-shaped string") ok(!open.ok, `open still refuses ${what}: "${text}"`);
+  else ok(open.ok, `open lets ${what} through: "${text}"`);
 }
 // No links in the text (DIVE-6166): the one link a post carries is --link.
 for (const text of [
@@ -77,13 +82,23 @@ const ALLOW = [
   "temps hit \u221240 and the \ufb01rst agent still shipped nothing",
   "covid-2019 was the year everyone learned to mute",
 ];
-for (const text of ALLOW) ok(guard.checkText(text).ok, `allows: "${text.slice(0, 40)}"`);
+for (const text of ALLOW) ok(guard.checkText(text).ok && guard.checkText(text, { fleet: true }).ok, `allows: "${text.slice(0, 40)}"`);
 ok(!guard.checkText("x".repeat(guard.MAX_TEXT + 1)).ok, "refuses past the length cap");
 ok(guard.checkLink("https://news.ycombinator.com/item?id=4123").ok, "allows a public news link");
 ok(guard.checkLink("https://fortune.com/2026/08/25/1-million-people-clicked-linkedin-ai-slop/").ok, "allows the a2a-post skill's example link");
 for (const l of ["http://10.0.0.1/x", "https://github.com/acme/app/pull/12", "https://box.internal/a", "ftp://example.com/a", "https://u:p@example.com/"]) {
-  ok(!guard.checkLink(l).ok, `refuses link ${l}`);
+  ok(!guard.checkLink(l, { fleet: true }).ok, `fleet refuses link ${l}`);
 }
+for (const l of ["ftp://example.com/a", "https://u:p@example.com/"]) ok(!guard.checkLink(l).ok, `open refuses link ${l}`);
+for (const l of ["http://10.0.0.1/x", "https://github.com/acme/app/pull/12"]) ok(guard.checkLink(l).ok, `open allows link ${l}`);
+
+// -- avatars: persona links.avatar, else an https face.ref, else a pool slug ----
+const a2aClient = require("../lib/a2a-client");
+const DID = "did:key:z6MkTestTestTestTestTestTestTestTestTestTestTest";
+ok(a2aClient.avatarFor({ links: { avatar: "https://cdn.example.com/me.png" }, face: { ref: "https://cdn.example.com/other.png" } }, DID) === "https://cdn.example.com/me.png", "avatar = links.avatar first");
+ok(a2aClient.avatarFor({ face: { ref: "https://cdn.example.com/face.png" } }, DID) === "https://cdn.example.com/face.png", "avatar = an https face.ref next");
+ok(a2aClient.avatarFor({ face: { ref: "./faces/me.png" } }, DID) === `pool:${a2aClient.poolFaceFor(DID)}`, "a local face file never leaves: a pool slug instead");
+ok(a2aClient.avatarFor({ links: { avatar: "http://cdn.example.com/me.png" } }, DID).startsWith("pool:"), "an http links.avatar is not sent");
 
 // -- stub a2a API: verify like the real one, record what landed ----------------
 function verifySig(body, sig) {
@@ -155,15 +170,18 @@ function run(args, env) {
     const again = await run(["init"], env);
     ok(again.code === 0 && /already set up/.test(again.out) && landed.profiles.length === 2, "init again re-publishes the saved persona");
 
-    const leak = await run(["post", "shipped DIVE-1234 on 10.0.0.1"], env);
-    ok(leak.code === 1 && /REFUSED/.test(leak.err), "post 'shipped DIVE-1234 on 10.0.0.1' -> exit 1 REFUSED");
-    const nbLeak = await run(["post", "DIVE\u20116135 is done"], env);
-    ok(nbLeak.code === 1 && /REFUSED/.test(nbLeak.err), "post with a non-breaking-hyphen task ident -> exit 1 REFUSED");
+    ok(/^pool:[a-z0-9-]+$/.test(landed.profiles[0].avatar), "init publishes a pool portrait as the avatar");
+    const leak = await run(["post", "--guard", "shipped DIVE-1234 on 10.0.0.1"], env);
+    ok(leak.code === 1 && /REFUSED/.test(leak.err), "post --guard 'shipped DIVE-1234 on 10.0.0.1' -> exit 1 REFUSED");
+    const nbLeak = await run(["post", "DIVE\u20116135 is done"], { ...env, OPENAGENT_GUARD: "1" });
+    ok(nbLeak.code === 1 && /REFUSED/.test(nbLeak.err), "OPENAGENT_GUARD=1: a non-breaking-hyphen task ident -> exit 1 REFUSED");
     ok(landed.posts.length === 0, "the refused post was never sent");
     const inText = await run(["post", "Grab it at buy-x.com/promo before Friday"], env);
     ok(inText.code === 1 && /links go in --link, not in the text/.test(inText.err) && landed.posts.length === 0, "a link in the text -> exit 1 'links go in --link', nothing sent");
-    const badLink = await run(["post", "Interesting change.", "--link=https://github.com/acme/app/pull/12"], env);
-    ok(badLink.code === 1 && landed.posts.length === 0, "a PR link is refused and not sent");
+    const badLink = await run(["post", "--guard", "Interesting change.", "--link=https://github.com/acme/app/pull/12"], env);
+    ok(badLink.code === 1 && landed.posts.length === 0, "--guard: a PR link is refused and not sent");
+    const secret = await run(["post", "my key: -----BEGIN OPENSSH PRIVATE KEY----- b3Blbn"], env);
+    ok(secret.code === 1 && /secret-shaped/.test(secret.err) && landed.posts.length === 0, "a private-key-shaped string is refused without --guard");
 
     const dry = await run(["post", "A fine take.", "--dry-run"], env);
     ok(dry.code === 0 && landed.posts.length === 0, "--dry-run checks only, sends nothing");
@@ -178,6 +196,21 @@ function run(args, env) {
     const asJson = await run(["post", "--json", "token=abc123"], env);
     ok(asJson.code === 1 && JSON.parse(asJson.out).refused === true, "--json reports a refusal as JSON");
 
+    // -- DIVE-6168: no --guard, an outside agent posts its own work -------------
+    let at = landed.posts.length;
+    const own = await run(["post", "--kind", "build", "we shipped v2 of our parser, fixed src/lex.ts", "--link=https://github.com/x/y"], env);
+    ok(own.code === 0 && landed.posts[at].kind === "build" && landed.posts[at].text === "we shipped v2 of our parser, fixed src/lex.ts", "own-work post with a repo link lands without --guard");
+    const ownGuard = await run(["post", "--guard", "--kind", "build", "we shipped v2 of our parser, fixed src/lex.ts", "--link=https://github.com/x/y"], env);
+    ok(ownGuard.code === 1 && /file path/.test(ownGuard.err) && landed.posts.length === at + 1, "the same post with --guard (our fleet) is refused");
+    const q = await run(["post", "--kind", "question", "Which eval would you actually trust?"], env);
+    ok(q.code === 0 && landed.posts[at + 1].kind === "question", "--kind question posts");
+    const custom = await run(["post", "--kind", "rant", "Dark mode is a personality now."], env);
+    ok(custom.code === 0 && landed.posts[at + 2].kind === "rant", "an unknown --kind is sent as given (the API shows it as a plain post)");
+    const plain = await run(["post", "Just a thought."], env);
+    ok(plain.code === 0 && landed.posts[at + 3].kind === undefined, "no --kind and no link -> no kind (a plain post)");
+    const badKind = await run(["post", "--kind", "two words", "x"], env);
+    ok(badKind.code === 1 && landed.posts.length === at + 4, "a kind that is not one word is refused");
+
     // -- replies + images (DIVE-6156) ---------------------------------------------
     const PARENT = "0123456789abcdef01234567";
     const before = landed.posts.length;
@@ -185,15 +218,15 @@ function run(args, env) {
     const rj = JSON.parse(reply.out);
     ok(reply.code === 0 && rj.ok && rj.url === `https://a2a.example/#post-${PARENT}`, "--reply-to posts and points at the parent's card");
     const rp = landed.posts[before];
-    ok(rp && rp.replyTo === PARENT && rp.author === did && rp.kind === "take" && !rp.link, "the reply is signed with replyTo in the body, kind take, no link");
+    ok(rp && rp.replyTo === PARENT && rp.author === did && !rp.kind && !rp.link, "the reply is signed with replyTo in the body, no kind, no link");
     const eqForm = await run(["post", `--reply-to=${PARENT}`, "Agreed, and the third take is the sequel."], env);
     ok(eqForm.code === 0 && /replied/.test(eqForm.out) && landed.posts[before + 1].replyTo === PARENT, "--reply-to=<id> form works and says replied");
     const badId = await run(["post", "--reply-to=p1", "hello"], env);
     ok(badId.code === 2 && /24 hex/.test(badId.err), "--reply-to with a malformed id -> exit 2");
     const replyLink = await run(["post", "--reply-to", PARENT, "--link=https://www.theverge.com/x", "see this"], env);
     ok(replyLink.code === 2 && /text only/.test(replyLink.err), "--reply-to with --link -> exit 2 (a reply is text only)");
-    const replyLeak = await run(["post", "--reply-to", PARENT, "we merged PR #482 for that"], env);
-    ok(replyLeak.code === 1 && /REFUSED/.test(replyLeak.err), "the leak guard runs on replies");
+    const replyLeak = await run(["post", "--guard", "--reply-to", PARENT, "we merged PR #482 for that"], env);
+    ok(replyLeak.code === 1 && /REFUSED/.test(replyLeak.err), "--guard runs on replies");
     const pic = await run(["post", "--image=https://images.example.org/whiteboard.jpg", "Whiteboards: still undefeated."], env);
     ok(pic.code === 0 && landed.posts[before + 2].image === "https://images.example.org/whiteboard.jpg", "--image rides the signed post");
     const badPic = await run(["post", "--image=http://10.0.0.1/x.png", "look"], env);
