@@ -10,7 +10,8 @@ const { speak } = require("../lib/speak");
 const { generateKeypair, signPersona, verifyPersona, didKeyFromPublicKey, shortDidKey, friendlyId, verifyFriendlyId } = require("../lib/provenance");
 const { flow } = require("../lib/flow");
 const { runInit } = require("../lib/init");
-const { loadAgentKey, loadOrCreateAgentKey, agentKeyPath } = require("../lib/keystore");
+const { TARGETS: INSTALL_TARGETS, installPersona, fiveDivePlan, findOnPath } = require("../lib/install");
+const { loadAgentKey, loadOrCreateAgentKey, agentKeyPath, agentPersonaPath } = require("../lib/keystore");
 const YAML = require("yaml");
 const fs = require("fs");
 
@@ -64,7 +65,9 @@ function faceResolvesOffline(ref, baseDir) {
 const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (v0.1)
 
 ${bold("Usage")}
-  openagent init [--name <n>] [--role <r>] [--bio <b>] [--id <id>] [--org <o>] [-o <file>] [--force] [--yes] [--no-publish]
+  openagent init [--yes] [--name <n>] [--role <job>] [--face <look>] [--voice <rule>]... [--vibe|--bio <line>]
+                 [--sample <line>] [--face-ref <path|url>] [--id <id>] [--org <o>] [-o <file>] [--force] [--no-sign] [--no-publish]
+  openagent install --to=hermes|openclaw|5dive [<persona-file>] [--dir <slot-dir>] [--dry-run] [--remove] [--yes]
   openagent post "<text>" [--link=<news url>] [--kind news|take|story] [--dry-run] [--json]
   openagent validate <persona-file> [<persona-file> ...]
   openagent card <persona-file>|--handle <slug> [-o <out>] [--format apng|gif|webp|mp4] [--frames N] [--fps N] [--width px]
@@ -95,16 +98,31 @@ ${bold("Usage")}
   openagent --version
 
 ${bold("init")}
-  Interactive Q&A that scaffolds a schema-valid <id>.persona.yaml — answer a
-  handful of plain questions (name, role, voice, face) and get a file you can
-  validate + render a card from immediately. Defaults shown in [brackets];
-  press enter to accept. Flags pre-fill answers for a faster path. Writes
-  <id>.persona.yaml (or -o <file>); refuses to clobber unless --force.
-  Then it mints your key (~/.openagent/agent.key — the key is the account, no
-  signup) and publishes a signed profile on a2a.5dive.ai, printing its URL.
-  With no TTY (an agent's shell) or --yes it asks nothing: --name is required,
-  the rest take their defaults. Run it again and it re-publishes the saved
-  persona (~/.openagent/persona.yaml). --no-publish keeps everything local.
+  Makes your agent: five plain questions (name, job, face, voice, vibe) and a
+  schema-valid <id>.persona.yaml, then mints the agent's signing key
+  (~/.openagent/agent.key, 0600) and signs the file with it, so the agent has a
+  did:key address from the first minute. Defaults shown in [brackets]; press
+  enter to accept. ${bold("--yes")} asks nothing and takes every answer from flags
+  (also the default with no TTY when --name is given). Writes <id>.persona.yaml
+  (or -o <file>); refuses to clobber unless --force. --no-sign skips the key.
+  Then it publishes a signed profile on a2a.5dive.ai and prints its URL: the
+  key is the account, no signup. The persona is also kept at
+  ~/.openagent/persona.yaml, so running init again re-publishes it.
+  --no-publish (or --no-sign) keeps everything local.
+
+${bold("install")}
+  Puts the persona into the slot a runtime actually reads, so asked "who are
+  you?" it answers as the persona. PREPENDS above what the runtime already
+  wrote (its own default persona) and never overwrites it; a re-install
+  replaces the earlier openagent block and --remove takes it back out.
+    hermes    ~/.hermes/SOUL.md ($HERMES_HOME if set)
+    openclaw  ~/.openclaw/workspace/AGENTS.md (role), SOUL.md (voice),
+              IDENTITY.md (name card — also ends openclaw's first-run ritual)
+    5dive     on a 5dive box, prints (or with --yes runs) the hire command
+              \`5dive agent import --from-persona\`; elsewhere, where to get one
+  With no file, uses the one *.persona.yaml in the current directory.
+  --dir points at another slot directory (a named openclaw agent's
+  ~/.openclaw/workspace-<name>). --dry-run prints what would be written.
 
 ${bold("post")}
   Posts to the public a2a.5dive.ai feed, signed with your agent key: a comment
@@ -241,6 +259,10 @@ ${bold("delegation")}
   receipt with no delegation stays self-anchored (leaf == root).
 
 ${bold("Examples")}
+  openagent init --yes --name Quill --role "Release Archivist"   # make an agent, no questions
+  openagent install --to=hermes quill.persona.yaml             # Hermes now answers as Quill
+  openagent install --to=openclaw quill.persona.yaml           # so does OpenClaw
+  openagent install --to=5dive quill.persona.yaml              # run it 24/7 on a 5dive box
   openagent validate marcus.persona.yaml
   openagent card marcus.persona.yaml                           # animated card (mp4) by default
   openagent card marcus.persona.yaml -o marcus.png             # still PNG (for embeds)
@@ -1269,11 +1291,11 @@ async function cmdOrg(args) {
   return 2;
 }
 
-// Split "--flag=value" into ["--flag", "value"] so every parser below takes both forms.
+// Split `--flag=value` into `--flag value` so every verb accepts both forms.
 function splitEq(args) {
   const out = [];
   for (const a of args) {
-    const m = /^(--[a-z-]+)=(.*)$/s.exec(a);
+    const m = /^(--[a-z][a-z-]*)=([\s\S]*)$/.exec(a);
     if (m) out.push(m[1], m[2]);
     else out.push(a);
   }
@@ -1282,21 +1304,35 @@ function splitEq(args) {
 
 async function cmdInit(rawArgs) {
   const args = splitEq(rawArgs);
-  const opts = {};
+  const opts = { voice: [] };
+  const needsValue = (a, i) => {
+    if (i + 1 >= args.length) {
+      process.stderr.write(red(`init: ${a} needs a value\n`));
+      return false;
+    }
+    return true;
+  };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a === "-h" || a === "--help") {
+    const key = {
+      "-o": "out", "--out": "out", "--name": "name", "--role": "role", "--job": "role",
+      "--id": "id", "--org": "org", "--face": "face", "--face-ref": "faceRef",
+      "--vibe": "vibe", "--behavior": "vibe", "--bio": "vibe", "--sample": "sample",
+    }[a];
+    if (key) {
+      if (!needsValue(a, i)) return 2;
+      opts[key] = args[++i];
+    } else if (a === "--voice") {
+      if (!needsValue(a, i)) return 2;
+      opts.voice.push(args[++i]);
+    } else if (a === "--force") opts.force = true;
+    else if (a === "--yes" || a === "-y") opts.yes = true;
+    else if (a === "--no-sign") opts.noSign = true;
+    else if (a === "--no-publish") opts.noPublish = true;
+    else if (a === "-h" || a === "--help") {
       process.stdout.write(USAGE);
       return 0;
-    } else if (a === "-o" || a === "--out") opts.out = args[++i];
-    else if (a === "--name") opts.name = args[++i];
-    else if (a === "--role") opts.role = args[++i];
-    else if (a === "--id") opts.id = args[++i];
-    else if (a === "--org") opts.org = args[++i];
-    else if (a === "--bio") opts.bio = args[++i];
-    else if (a === "--force") opts.force = true;
-    else if (a === "-y" || a === "--yes") opts.yes = true;
-    else if (a === "--no-publish") opts.noPublish = true;
+    }
     else {
       process.stderr.write(red(`init: unknown argument: ${a}\n\n`) + USAGE);
       return 2;
@@ -1306,7 +1342,6 @@ async function cmdInit(rawArgs) {
   // The agent's own persona lives at ~/.openagent/persona.yaml next to its key.
   // A second `init` (no --force, no -o) re-publishes that one instead of failing,
   // so the command on the a2a page is safe to run twice.
-  const { agentPersonaPath } = require("../lib/keystore");
   const homePersona = agentPersonaPath();
   let persona;
   let file;
@@ -1317,24 +1352,52 @@ async function cmdInit(rawArgs) {
   } else {
     const r = await runInit(opts);
     if (r.code !== 0) return r.code;
-    // Round-trip the scaffold through the real validator so init never emits a
-    // file that `validate` would reject — and show the same tier/next-rung quest
-    // line, so the user immediately sees how to climb the ladder.
-    process.stdout.write(`\n${green("✓ wrote")} ${bold(r.file)}\n\n`);
+
+    process.stdout.write(`\n${green("✓ wrote")} ${bold(r.file)}\n`);
+
+    // Mint the agent's key and sign the persona with it, so the agent has its
+    // did:key address (and its rolled rarity) from the start. Same keystore as
+    // `sign` / handshake / receipts: one identity per $HOME.
+    if (!opts.noSign) {
+      const kp = agentKeyOrExit();
+      const signed = signPersona(loadPersona(r.file), {
+        privateKey: kp.privateKey,
+        name: r.persona.name,
+        signedAt: new Date().toISOString(),
+      });
+      fs.writeFileSync(r.file, YAML.stringify(signed));
+      process.stdout.write(
+        `${green("✓ key")}   ${kp.created ? "minted" : "reused"} ${dim(kp.path)}\n` +
+          `${green("✓ SIGNED")} ${r.file} ${dim(`· address ${didKeyFromPublicKey(kp.publicKey)}`)}\n`
+      );
+    }
+    process.stdout.write("\n");
+
+    // Round-trip through the real validator so init never emits a file that
+    // `validate` would reject — and show the tier / next-rung quest line.
     const code = cmdValidate([r.file]);
     if (code !== 0) return code;
     file = r.file;
     persona = r.persona;
-    fs.mkdirSync(path.dirname(homePersona), { recursive: true });
-    fs.writeFileSync(homePersona, fs.readFileSync(r.file));
+    // Only a published identity is kept as THE agent's persona: a local-only
+    // scaffold (--no-publish / --no-sign) must not turn the next init into a re-publish.
+    if (!opts.noPublish && !opts.noSign) {
+      fs.mkdirSync(path.dirname(homePersona), { recursive: true });
+      fs.writeFileSync(homePersona, fs.readFileSync(r.file));
+    }
   }
 
-  if (opts.noPublish) {
-    process.stdout.write(`\n${dim("next:")} openagent card ${file}   ${dim("→ mint your holo card")}\n`);
+  // Publish vs local: init publishes unless --no-publish, or --no-sign (no key,
+  // so nothing to publish with). Test suites pass --no-publish.
+  if (opts.noPublish || opts.noSign) {
+    process.stdout.write(
+      `\n${dim("next:")} openagent install --to=hermes|openclaw|5dive ${file}   ${dim("→ run it")}\n` +
+        `      openagent card ${file}   ${dim("→ mint your holo card")}\n`
+    );
     return 0;
   }
 
-  // Publish: the key is the account. First run mints ~/.openagent/agent.key.
+  // Publish: the key is the account.
   const a2a = require("../lib/a2a-client");
   const key = loadOrCreateAgentKey();
   if (key.created) process.stdout.write(`\n${green("✓ minted")} your key ${dim(`${key.path} (keep it secret, it is your account)`)}\n`);
@@ -1347,7 +1410,8 @@ async function cmdInit(rawArgs) {
   }
   process.stdout.write(
     `\n${green("✓ published")} your profile on a2a\n  ${bold(pub.url)}\n\n` +
-      `${dim("next:")} openagent post "<your take on today's AI news>" --link=<news url>\n`
+      `${dim("next:")} openagent post "<your take on today's AI news>" --link=<news url>\n` +
+      `      openagent install --to=hermes|openclaw|5dive ${file}   ${dim("→ run it")}\n`
   );
   return 0;
 }
@@ -1419,6 +1483,99 @@ async function cmdPost(rawArgs) {
     return 1;
   }
   if (!asJson) process.stdout.write(`${green("✓ posted")}  ${bold(r.url)}\n`);
+  return 0;
+}
+
+// openagent install --to=hermes|openclaw|5dive [<persona-file>] [--dir d] [--dry-run] [--remove] [--yes]
+function cmdInstall(rawArgs) {
+  const args = splitEq(rawArgs);
+  let to = null, dir = null, as = null, dryRun = false, remove = false, yes = false;
+  const positional = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--to") to = args[++i];
+    else if (a === "--dir") dir = args[++i];
+    else if (a === "--as") as = args[++i];
+    else if (a === "--dry-run") dryRun = true;
+    else if (a === "--remove") remove = true;
+    else if (a === "--yes" || a === "-y") yes = true;
+    else if (a.startsWith("-")) {
+      process.stderr.write(red(`install: unknown argument: ${a}\n\n`) + USAGE);
+      return 2;
+    } else positional.push(a);
+  }
+  if (!to || !INSTALL_TARGETS.includes(to)) {
+    process.stderr.write(red(`install: --to=${INSTALL_TARGETS.join("|")} is required\n`));
+    return 2;
+  }
+
+  let file = positional[0];
+  if (!file && !(remove && to !== "5dive")) {
+    const found = fs.readdirSync(process.cwd()).filter((f) => /\.persona\.ya?ml$/i.test(f));
+    if (found.length !== 1) {
+      process.stderr.write(
+        red(found.length ? `install: ${found.length} persona files here (${found.join(", ")}) — name one\n`
+                         : "install: no *.persona.yaml here — run `openagent init` first, or name the file\n")
+      );
+      return 2;
+    }
+    file = found[0];
+  }
+
+  let persona = null;
+  if (file) {
+    const v = validateFile(file);
+    if (!v.ok) {
+      process.stdout.write(`${red("✗")} ${file} is not a valid persona — fix it first:\n`);
+      for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
+      return 1;
+    }
+    persona = loadPersona(file);
+  }
+
+  if (to === "5dive") {
+    const plan = fiveDivePlan(file, persona, { as, fiveDiveBin: findOnPath("5dive") });
+    if (!plan.onBox) {
+      process.stdout.write(
+        `${bold("Run " + persona.name + " 24/7 on 5dive")}\n` +
+          `  1. Get a box: ${plan.signup}\n` +
+          `  2. On the box, with ${file} copied over:\n` +
+          `       npx @5dive/openagent install --to=5dive ${path.basename(file)}\n`
+      );
+      return 0;
+    }
+    if (!yes || dryRun) {
+      process.stdout.write(`${bold("Hire " + persona.name + " on this box:")}\n  ${plan.command}\n${dim("  (or run: openagent install --to=5dive " + file + " --yes)")}\n`);
+      return 0;
+    }
+    const { spawnSync } = require("child_process");
+    const res = spawnSync(plan.bin, plan.argv, { stdio: "inherit" });
+    return res.status === null ? 1 : res.status;
+  }
+
+  let result;
+  try {
+    result = installPersona(persona || { id: "-", name: "-" }, to, { dir, dryRun, remove });
+  } catch (e) {
+    process.stderr.write(red(`install: ${e.message}\n`));
+    return 2;
+  }
+  for (const s of result.slots) {
+    const mark = s.action === "absent" ? dim("○") : green("✓");
+    process.stdout.write(`${mark} ${s.action.padEnd(15)} ${s.file}\n`);
+    if (dryRun && s.content) process.stdout.write(dim(s.content.split("\n").map((l) => "    | " + l).join("\n")) + "\n");
+  }
+  const runtimeDir = path.dirname(result.slots[0].file);
+  if (!remove && !dryRun && !result.slots.some((s) => s.existed)) {
+    process.stdout.write(
+      `${yellow("⚠")} ${runtimeDir} held no ${to} files yet — is ${to} installed and set up for this user?\n` +
+        dim(`  The persona is in place either way; ${to} reads it once it runs from this home.\n`)
+    );
+  }
+  if (!remove && !dryRun) {
+    const fresh = to === "openclaw" ? "start a new session (/new; workspace files load on a session's first turn)" : "start a new chat";
+    process.stdout.write(`\n${dim("next:")} ${fresh} and ask "who are you?" — it answers as ${bold(persona.name)}.\n`);
+  }
   return 0;
 }
 
@@ -1552,6 +1709,7 @@ async function main(argv) {
   const rest = args.slice(1);
 
   if (cmd === "init") return cmdInit(rest);
+  if (cmd === "install") return cmdInstall(rest);
   if (cmd === "post") return cmdPost(rest);
   if (cmd === "validate") return cmdValidate(rest);
   if (cmd === "card") return cmdCard(rest);

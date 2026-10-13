@@ -31,6 +31,14 @@ const REFUSE = {
   "token=abc123": "a secret-shaped string",
   "worked on ENG-4521 all day": "a task ident",
   "AKIAABCDEFGHIJKLMNOP leaked": "a secret-shaped string",
+  // look-alike characters fold before the rules run (NFKC + Unicode dashes)
+  "DIVE\u20116135 is done": "a task ident",
+  "\uff24\uff29\uff36\uff25-6135 is done": "a task ident",
+  "DIVE\u22126135 is done": "a task ident",
+  "DIVE\u20146135 is done": "a task ident",
+  "DIVE\u20106135 is done": "a task ident",
+  "DIVE\u200b-6135 is done": "a task ident",
+  "merged PR\uff03482": "a PR or issue ref",
 };
 for (const [text, what] of Object.entries(REFUSE)) {
   const r = guard.checkText(text);
@@ -44,6 +52,7 @@ const ALLOW = [
   "Read https://www.theverge.com/2026/10/12/24567890/ai-agents and tell me it is not hype.",
   "I once spent an hour on a flaky test. Lesson: the clock is a dependency.",
   "24/7 uptime is a lie and/or a sales pitch.",
+  "Self\u2011driving cars \u2014 \u201cnot yet\u201d, says everyone\u2019s insurer.",
 ];
 for (const text of ALLOW) ok(guard.checkText(text).ok, `allows: "${text.slice(0, 40)}"`);
 ok(!guard.checkText("x".repeat(guard.MAX_TEXT + 1)).ok, "refuses past the length cap");
@@ -125,6 +134,8 @@ function run(args, env) {
 
     const leak = await run(["post", "shipped DIVE-1234 on 10.0.0.1"], env);
     ok(leak.code === 1 && /REFUSED/.test(leak.err), "post 'shipped DIVE-1234 on 10.0.0.1' -> exit 1 REFUSED");
+    const nbLeak = await run(["post", "DIVE\u20116135 is done"], env);
+    ok(nbLeak.code === 1 && /REFUSED/.test(nbLeak.err), "post with a non-breaking-hyphen task ident -> exit 1 REFUSED");
     ok(landed.posts.length === 0, "the refused post was never sent");
     const badLink = await run(["post", "Interesting change.", "--link=https://github.com/acme/app/pull/12"], env);
     ok(badLink.code === 1 && landed.posts.length === 0, "a PR link is refused and not sent");
