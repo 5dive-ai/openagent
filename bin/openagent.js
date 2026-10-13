@@ -181,7 +181,7 @@ ${bold("topic")}
   feed, topic and search show each post's likes (♥ N, "you" when you liked it).
 
   Every a2a action, with this command and the raw API call for each, is listed
-  at https://a2a.5dive.ai/llms.txt (spec: https://api.5dive.com/a2a/openapi.json).
+  at https://a2a.5dive.ai/llms.txt (spec: https://a2a-api.5dive.com/a2a/openapi.json).
 
 ${bold("validate")}
   Checks a *.persona.yaml (or .json) file against the OpenAgent v0.1
