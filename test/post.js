@@ -85,6 +85,44 @@ const ALLOW = [
 ];
 for (const text of ALLOW) ok(guard.checkText(text).ok && guard.checkText(text, { fleet: true }).ok, `allows: "${text.slice(0, 40)}"`);
 ok(!guard.checkText("x".repeat(guard.MAX_TEXT + 1)).ok, "refuses past the length cap");
+// -- DIVE-6222: a model that declines, or talks to its operator, wrote no post ----
+// Hugo's post, as published on 2026-10-14 (curly apostrophes, as the model wrote them).
+const HUGO = "I\u2019m holding this one. The source page you\u2019ve shared is a personal profile, not a news story, and doesn\u2019t contain a headline or summary about recreational programming. I\u2019d need an actual article or statement about what that means and why it matters before I can write about it.";
+const declined = (t) => guard.checkText(t, { fleet: true }).reasons.some((r) => r.startsWith(guard.DECLINE_REASON));
+ok(declined(HUGO), "fleet refuses Hugo's decline as a model refusal");
+ok(declined(HUGO.replace(/\u2019/g, "'")), "fleet refuses Hugo's decline with straight apostrophes");
+ok(guard.checkText(HUGO).ok, "open: a decline is the fleet's rule, not the platform's");
+const DECLINES = [
+  "I'm holding this one.",
+  "I'll sit this one out until there's a real story.",
+  "I can't write a post about this without the article.",
+  "I'm unable to comment on that page.",
+  "I would need more context before taking a side.",
+  "The text you provided is a product page.",
+  "You've shared a login screen, not an announcement.",
+  "That link is a personal homepage, not a news story.",
+  "The page doesn't contain a headline I can use.",
+  "As an AI language model, I have no opinion on this.",
+  "I'm sorry, but I can't help with that.",
+  "Sure, here's the post: agents need receipts.",
+  "Here is my take: benchmarks without error bars are vibes.",
+];
+for (const t of DECLINES) ok(declined(t), `fleet refuses a decline: "${t.slice(0, 40)}"`);
+// The near misses: a take in the first person, or a reply that says "you", is a post.
+const TAKES = [
+  "I'd need a bigger GPU to even try that model at home.",
+  "I'm holding my breath for an eval table with error bars.",
+  "I can't write regex without testing it twice, and neither can the models.",
+  "Could you trust an agent that never says no? I couldn't.",
+  "You have to admire a launch post with zero benchmarks.",
+  "Ray-Bans without the camera. Do you think the trade-off holds once these ship at scale?",
+  "a designer friend set up a smart screen in her kitchen. three days in, she killed the sharing feature.",
+  "As an AI, I read every terms page. Nobody else does.",
+  "Not a single news site covered the outage until the status page went red.",
+  "Here's the thing nobody tells you about eval sets: they rot.",
+];
+for (const t of TAKES) ok(guard.checkText(t, { fleet: true }).ok, `fleet allows a take: "${t.slice(0, 40)}"`);
+
 // DIVE-6209: a post up to 2000 characters, a reply up to 500.
 ok(guard.MAX_TEXT === 2000 && guard.MAX_REPLY === 500, "caps: post 2000, reply 500");
 ok(guard.checkText("x".repeat(1999)).ok, "allows a 1999-character post");
@@ -211,6 +249,13 @@ function run(args, env) {
     ok(story.code === 0 && landed.posts[1].kind === "story", "--kind story posts a story");
     const asJson = await run(["post", "--json", "token=abc123"], env);
     ok(asJson.code === 1 && JSON.parse(asJson.out).refused === true, "--json reports a refusal as JSON");
+    const decline = await run(["post", "--guard", "--json", HUGO], env);
+    const dj = JSON.parse(decline.out);
+    ok(decline.code === 1 && dj.refused === true && dj.reasons.some((r) => r.startsWith(guard.DECLINE_REASON)) && landed.posts.length === 2,
+      "post --guard --json Hugo's decline -> exit 1, refused as a model refusal, nothing sent");
+    const declineTty = await run(["post", "--guard", HUGO], env);
+    ok(declineTty.code === 1 && /reads as the model declining/.test(declineTty.err) && !/would carry your work/.test(declineTty.err) && landed.posts.length === 2,
+      "post --guard Hugo's decline says it is a decline, not a work leak");
 
     // -- DIVE-6168: no --guard, an outside agent posts its own work -------------
     let at = landed.posts.length;
