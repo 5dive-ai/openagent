@@ -27,13 +27,20 @@ for (const action of ["openagent init", "openagent post", "post --reply-to=", "o
 }
 for (const [name, text] of [["--help", help], ["README", readme], ["skill", skill]]) ok(text.includes("a2a.5dive.ai/llms.txt"), `${name} points at llms.txt`);
 ok(/## 1\. Read the instructions[\s\S]*?llms\.txt/.test(skill), "the skill's first step is to read llms.txt");
-ok(/curl -s 'https:\/\/api\.5dive\.com\/a2a\/posts\?limit=5'/.test(readme), "the README has the GET /a2a/posts curl example");
+ok(/curl -s 'https:\/\/a2a-api\.5dive\.com\/a2a\/posts\?limit=5'/.test(readme), "the README has the GET /a2a/posts curl example");
 
 // -- stub a2a API -----------------------------------------------------------------
 const BO = "did:key:z6MkBoBoBoBoBoBoBoBoBoBoBoBoBoBoBoBoBoBoBoBoBoBo";
 const CY = "did:key:z6MkCyCyCyCyCyCyCyCyCyCyCyCyCyCyCyCyCyCyCyCyCyCy";
 const AL1 = "did:key:z6MkAL1AL1AL1AL1AL1AL1AL1AL1AL1AL1AL1AL1AL1AL1A";
 const AL2 = "did:key:z6MkAL2AL2AL2AL2AL2AL2AL2AL2AL2AL2AL2AL2AL2AL2A";
+// DIVE-6178: the persona's org.name is the profile's company; no org, no company.
+{
+  const { profileBody } = require("../lib/a2a-client");
+  const withOrg = profileBody({ name: "Ada", role: "R", org: { name: "Acme Labs" } }, "did:key:z6MkA", "t");
+  const noOrg = profileBody({ name: "Ada", role: "R" }, "did:key:z6MkA", "t");
+  if (withOrg.company !== "Acme Labs" || "company" in noOrg) throw new Error("profileBody company from org.name");
+}
 const prof = (did, name, followers = 0, following = 0) => ({ did, name, role: "Agent", bio: "", topics: [], followers, following });
 const PROFILES = { [BO]: prof(BO, "Bo"), [CY]: prof(CY, "Cy"), [AL1]: prof(AL1, "Al"), [AL2]: prof(AL2, "Al") };
 const at = new Date(Date.now() - 3 * 3600e3).toISOString();
@@ -85,6 +92,7 @@ const server = http.createServer((req, res) => {
     if (req.method === "POST" && u.pathname === "/a2a/profiles") {
       const j = JSON.parse(raw);
       PROFILES[j.profile.did] = prof(j.profile.did, j.profile.name);
+      if (j.profile.company) PROFILES[j.profile.did].company = { slug: j.profile.company.toLowerCase().replace(/[^a-z0-9]+/g, "-"), name: j.profile.company, verified: false };
       return send(200, { did: j.profile.did });
     }
     send(404, { error: "no route" });
@@ -125,14 +133,14 @@ function run(args, env) {
     ok((await run(["follow", "Bo"], env)).code === 2, "follow with no key -> exit 2");
 
     // -- follow --------------------------------------------------------------------
-    const init = await run(["init", "--name", "Newbie", "--role", "Fresh key"], env);
+    const init = await run(["init", "--name", "Newbie", "--role", "Fresh key", "--company", "Acme Labs"], env);
     ok(init.code === 0, `init exits 0 (${init.err.trim()})`);
     const me = fs.readFileSync(path.join(env.OPENAGENT_HOME, "agent.key"), "utf8") && Object.keys(PROFILES).find((d) => PROFILES[d].name === "Newbie");
     const fol = await run(["follow", "Bo"], env);
     ok(fol.code === 0 && /✓ following Bo {2}\(1 follower\)/.test(fol.out), `follow Bo -> signed, verified, 1 follower (${fol.err.trim()})`);
     ok(follows.get(me).has(BO), "the stub recorded the follow from the init key");
     const fo = await run(["feed", "--following"], env);
-    ok(fo.code === 0 && fo.out.includes("Bo ·") && !fo.out.includes("Cy ·") && seen.includes(`GET /a2a/posts?limit=20&following=${encodeURIComponent(me)}`), "feed --following sends your did and shows only Bo");
+    ok(fo.code === 0 && fo.out.includes("Bo ·") && !fo.out.includes("Cy ·") && seen.includes(`GET /a2a/posts?limit=20&following=${encodeURIComponent(me)}&viewer=${encodeURIComponent(me)}`), "feed --following sends your did and shows only Bo");
     ok(/already following Bo/.test((await run(["follow", "bo"], env)).out), "following again -> already following");
     const amb = await run(["follow", "Al"], env);
     ok(amb.code === 2 && amb.err.includes(AL1) && amb.err.includes(AL2), "an ambiguous name -> exit 2 listing both dids");
@@ -147,6 +155,9 @@ function run(args, env) {
     // -- profile ---------------------------------------------------------------------
     const mine = await run(["profile"], env);
     ok(mine.code === 0 && /Newbie/.test(mine.out) && /0 followers · 1 following/.test(mine.out), "profile (own) shows the counts");
+    // DIVE-6178: init --company signs the company into the profile; profile shows its page.
+    ok(PROFILES[me].company && PROFILES[me].company.name === "Acme Labs", "init --company sends `company` in the signed profile");
+    ok(/works at Acme Labs .*\/c\/acme-labs/.test(mine.out), "profile shows the company and its a2a page");
     const bo = await run(["profile", "Bo", "--json"], env);
     ok(bo.code === 0 && JSON.parse(bo.out).profile.followers === 1, "profile Bo --json: 1 follower");
   } finally {
