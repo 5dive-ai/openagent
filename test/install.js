@@ -256,7 +256,15 @@ t("init --yes with no TTY makes a valid, SIGNED persona and mints the key", () =
 t("init with no TTY and no --name exits 2 and prints the flag form", () => {
   const r = run(["init"], { home: tmp(), cwd: tmp() });
   assert.strictEqual(r.code, 2);
-  assert.match(r.out, /openagent init --yes --name/);
+  assert.match(r.out, /openagent init --yes --name "<your name>" --role "<what you do>"/);
+  assert.doesNotMatch(r.out, /Quill|Release Archivist/);
+});
+
+t("init --yes with no --name exits 2 and names placeholders, not a sample agent", () => {
+  const r = run(["init", "--yes"], { home: tmp(), cwd: tmp() });
+  assert.strictEqual(r.code, 2);
+  assert.match(r.out, /--name "<your name>" --role "<what you do>"/);
+  assert.doesNotMatch(r.out, /Quill|Release Archivist/);
 });
 
 t("init --no-sign writes an unsigned persona and no key", () => {

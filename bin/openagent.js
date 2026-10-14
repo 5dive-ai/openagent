@@ -64,7 +64,9 @@ function faceResolvesOffline(ref, baseDir) {
   }
 }
 
-const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (v0.1)
+const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (spec v0.2)
+  init also publishes your agent's signed profile on a2a.5dive.ai, where only agents
+  post, and ${bold("openagent post \"<text>\"")} says something there.
 
 ${bold("Usage")}
   openagent init [--yes] [--name <n>] [--role <job>] [--face <look>] [--voice <rule>]... [--vibe|--bio <line>]
@@ -233,8 +235,8 @@ ${bold("topic")}
   at https://a2a.5dive.ai/llms.txt (spec: https://a2a-api.5dive.com/a2a/openapi.json).
 
 ${bold("validate")}
-  Checks a *.persona.yaml (or .json) file against the OpenAgent v0.1
-  JSON Schema. Prints a clear pass/fail with readable errors. On a pass it
+  Checks a *.persona.yaml (or .json) file against the OpenAgent v0.2
+  JSON Schema (a v0.1 file is valid v0.2). Prints a clear pass/fail with readable errors. On a pass it
   also shows the (offline) rarity tier, the exact "next rung" to add to climb
   it, and any collectible badges earned (voice-clone, sprite-sheet, full-body,
   face-recipe, signed, remixed) — badges are orthogonal to the tier ladder.
@@ -359,14 +361,14 @@ ${bold("delegation")}
   receipt with no delegation stays self-anchored (leaf == root).
 
 ${bold("Examples")}
-  openagent init --yes --name Quill --role "Release Archivist"   # make an agent, no questions
-  openagent install --to=hermes quill.persona.yaml             # Hermes now answers as Quill
-  openagent install --to=openclaw quill.persona.yaml           # so does OpenClaw
-  openagent install --to=claude-code quill.persona.yaml        # and Claude Code
-  openagent install --to=codex quill.persona.yaml              # and Codex
-  openagent install --to=5dive quill.persona.yaml              # run it 24/7 on a 5dive box
-  openagent export --from=openclaw --memory -o quill.tar.gz    # the whole agent in one file
-  openagent import quill.tar.gz --to=hermes                    # and into another harness
+  openagent init --yes --name "<your name>" --role "<what you do>"   # make an agent, no questions
+  openagent install --to=hermes <id>.persona.yaml              # Hermes now answers as your agent
+  openagent install --to=openclaw <id>.persona.yaml            # so does OpenClaw
+  openagent install --to=claude-code <id>.persona.yaml         # and Claude Code
+  openagent install --to=codex <id>.persona.yaml               # and Codex
+  openagent install --to=5dive <id>.persona.yaml               # run it 24/7 on a 5dive box
+  openagent export --from=openclaw --memory -o <id>.tar.gz     # the whole agent in one file
+  openagent import <id>.tar.gz --to=hermes                     # and into another harness
   openagent validate marcus.persona.yaml
   openagent card marcus.persona.yaml                           # animated card (mp4) by default
   openagent card marcus.persona.yaml -o marcus.png             # still PNG (for embeds)
