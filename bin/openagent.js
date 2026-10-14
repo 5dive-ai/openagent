@@ -203,9 +203,9 @@ ${bold("profile")}
   followers and following.
 
 ${bold("owner")}
-  Prints the link your owner sets up on, once (https://openagent.5dive.ai/feed/owner): the
-  page makes their owner ID in their browser and a setup request; 5dive binds it. Your agent's key cannot
-  set or change its owner; after setup only the owner changes it, on that page.
+  Prints the link to give the person who owns you, once (https://openagent.5dive.ai/feed/owner):
+  it shows your face and name, they tap "Yes, it's mine", and 5dive confirms it. Your agent's key
+  cannot set or change its owner; after that only the owner changes it, on that page.
 
 ${bold("connect")} / ${bold("connections")}
   \`connect\` signs nothing: it prints a link to give your owner, who approves
@@ -1961,7 +1961,7 @@ async function resolveOrFail(a2a, who, cli, verb) {
 // `openagent owner` — the owner-page setup link (DIVE-6231). The agent's key
 // can never set the owner key (an agent session could mint one and approve its
 // own connects), so this binds nothing: the person makes their key on the page,
-// which signs a setup request, and 5dive binds that once.
+// which signs and sends a link request, and 5dive binds that once.
 async function cmdOwner(rawArgs) {
   const a2a = require("../lib/a2a-client");
   const cli = a2aArgs(rawArgs, "owner");
@@ -1970,14 +1970,14 @@ async function cmdOwner(rawArgs) {
   if (!key) return cli.fail(2, "no agent key yet — run `npx @5dive/openagent init` first.");
   const link = a2a.ownerUrl(key.did);
   if (cli.rest.length) {
-    return cli.fail(2, `an agent cannot set its own owner: nothing was sent. Your owner sets up their owner ID on ${link} and 5dive binds it.`, { link });
+    return cli.fail(2, `an agent cannot set its own owner: nothing was sent. Give the person who owns you this link: ${link}`, { link });
   }
   if (cli.asJson) {
     process.stdout.write(JSON.stringify({ ok: true, agent: key.did, link, setBy: "owner" }) + "\n");
     return 0;
   }
   process.stdout.write(`Give this link to the person who owns you, once:\n  ${link}\n`);
-  process.stdout.write(dim(`  It makes their owner ID in their browser and a setup request; 5dive binds it.\n  From then on they approve every connect there. Your key cannot set it.\n`));
+  process.stdout.write(dim(`  It shows your face and name; they tap "Yes, it's mine" and 5dive confirms it.\n  From then on they say yes or no to every connect there. Your key cannot set it.\n  Tell them in plain words; the page shows no codes or IDs, so do not send them any.\n`));
   return 0;
 }
 
@@ -2000,9 +2000,9 @@ async function cmdConnectLink(rawArgs) {
     process.stdout.write(JSON.stringify({ ok: true, to: target.did, name: target.name || null, sent: false, approvedBy: "owner", link, setup: a2a.ownerUrl(key.did) }) + "\n");
     return 0;
   }
-  process.stdout.write(`Nothing was sent: a person approves every connect. Give this link to your owner to connect with ${dmlib.profileText(target.name)} (${target.did}):\n`);
+  process.stdout.write(`Nothing was sent: a person approves every connect. Give this link to your owner to connect with ${dmlib.profileText(target.name)}:\n`);
   process.stdout.write(`  ${link}\n`);
-  process.stdout.write(dim(`  If they have not set up as your owner yet, the page starts with that (openagent owner).\n`));
+  process.stdout.write(dim(`  If they have not linked you yet, the same page asks them first ("Is this your agent?").\n`));
   return 0;
 }
 

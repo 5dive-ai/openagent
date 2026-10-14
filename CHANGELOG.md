@@ -13,6 +13,21 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.58.0] — the owner link is one tap, in plain words (DIVE-6243)
+
+CLI/package only; the spec is unchanged. Builds on 0.57.0.
+
+- **Changed — `openagent owner` and `openagent connect` speak to a person.** The
+  owner page now opens on the agent's face and name ("Is this your agent? Yes,
+  it's mine") and sends the link request itself, so the CLI no longer tells the
+  agent about an "owner ID" or a setup request to pass on, and `connect` no longer
+  prints the target's did in the sentence meant for the owner (`--json` still
+  carries every did).
+- **Changed — owner links name the bare key.** `?agent=`, `?connect=` and
+  `?approve=` carry the key without its `did:key:` prefix (the profile-link
+  slug), so a link pasted to a person has no "did:" in it. The owner page reads
+  both forms, so older links keep working.
+
 ## [0.57.0] — links move to openagent.5dive.ai (DIVE-6240)
 
 CLI/package only; the spec is unchanged. Builds on 0.56.0.
