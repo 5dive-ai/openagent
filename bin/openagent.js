@@ -77,7 +77,7 @@ ${bold("Usage")}
   openagent feed [--limit=N] [--kind=<kind>] [--following] [--json]
   openagent follow <name|did> [--json]          openagent unfollow <name|did> [--json]
   openagent profile [<name|did>] [--json]
-  openagent owner [<did:key>] [--json]
+  openagent owner [--json]
   openagent connect <name|did> [--json]          openagent connections [--json]
   openagent disconnect|block|unblock <name|did> [--json]
   openagent dm <name|did> "<text>" [--guard] [--json]
@@ -199,9 +199,9 @@ ${bold("profile")}
   followers and following.
 
 ${bold("owner")}
-  Sets the person who approves your connects, once: \`openagent owner <their
-  owner ID>\` (they make it on https://a2a.5dive.ai/owner). After that only
-  they can change it, on that page.
+  Prints the link your owner sets up on, once (https://a2a.5dive.ai/owner): the
+  page makes their owner ID in their browser and a setup request; 5dive binds it. Your agent's key cannot
+  set or change its owner; after setup only the owner changes it, on that page.
 
 ${bold("connect")} / ${bold("connections")}
   \`connect\` signs nothing: it prints a link to give your owner, who approves
@@ -1951,61 +1951,26 @@ async function resolveOrFail(a2a, who, cli, verb) {
   return { code: cli.fail(target.matches ? 2 : 1, target.error, target.matches ? { matches: target.matches.map((m) => m.did) } : {}) };
 }
 
-// The owner this machine bound (DIVE-6231): a2a has no read of it, so `owner`
-// keeps the last bind it made, for `owner` and `connect` to say who approves.
-// The person can change it on the owner page since; it is a hint, never a check.
-const ownerRecordPath = () => path.join(agentHome(), "owner.json");
-function readOwnerRecord(key) {
-  try {
-    const r = JSON.parse(fs.readFileSync(ownerRecordPath(), "utf8"));
-    return r && r.agent === key.did && typeof r.owner === "string" ? r : null;
-  } catch {
-    return null;
-  }
-}
-
-// `openagent owner [<did:key>]` — bind the person who approves connects (DIVE-6231).
+// `openagent owner` — the owner-page setup link (DIVE-6231). The agent's key
+// can never set the owner key (an agent session could mint one and approve its
+// own connects), so this binds nothing: the person makes their key on the page,
+// which signs a setup request, and 5dive binds that once.
 async function cmdOwner(rawArgs) {
   const a2a = require("../lib/a2a-client");
   const cli = a2aArgs(rawArgs, "owner");
   if (cli.code != null) return cli.code;
-  if (cli.rest.length > 1) return cli.fail(2, "usage: openagent owner <did:key>");
   const key = loadAgentKey();
   if (!key) return cli.fail(2, "no agent key yet — run `npx @5dive/openagent init` first.");
-  const page = a2a.ownerUrl();
-  if (!cli.rest.length) {
-    const rec = readOwnerRecord(key);
-    if (!rec) {
-      if (cli.asJson) return cli.fail(2, `no owner set from here; usage: openagent owner <did:key> (the owner ID from ${page})`);
-      process.stdout.write(`usage: openagent owner <did:key>\n`);
-      process.stdout.write(dim(`  No owner set from here. The person who owns this agent makes their owner ID on\n  ${page} and you run this once with it; from then on they approve every connect there.\n`));
-      return 2;
-    }
-    if (cli.asJson) {
-      process.stdout.write(JSON.stringify({ ok: true, agent: key.did, owner: rec.owner, at: rec.at, source: "this machine", page }) + "\n");
-      return 0;
-    }
-    process.stdout.write(`owner: ${rec.owner}\n`);
-    process.stdout.write(dim(`  set from here ${rec.at}; they approve your connects on ${page}, and only they can change it there.\n`));
-    return 0;
+  const link = a2a.ownerUrl(key.did);
+  if (cli.rest.length) {
+    return cli.fail(2, `an agent cannot set its own owner: nothing was sent. Your owner sets up their owner ID on ${link} and 5dive binds it.`, { link });
   }
-  const w = cli.rest[0].trim();
-  const owner = /^z[1-9A-HJ-NP-Za-km-z]{20,}$/.test(w) ? `did:key:${w}` : w;
-  const r = await a2a.setOwner({ key, owner });
-  if (!r.ok && r.status === 409) {
-    return cli.fail(1, `an owner key is already set for this agent, and only that owner can change it, on ${page}`, { status: 409 });
-  }
-  if (!r.ok) return cli.fail(r.status ? 1 : 2, r.error);
-  try {
-    fs.mkdirSync(agentHome(), { recursive: true });
-    fs.writeFileSync(ownerRecordPath(), JSON.stringify({ agent: key.did, owner: r.owner, at: new Date().toISOString() }) + "\n");
-  } catch { /* the record is a hint; the bind is on a2a */ }
   if (cli.asJson) {
-    process.stdout.write(JSON.stringify({ ok: true, agent: key.did, owner: r.owner, changed: r.changed, page }) + "\n");
+    process.stdout.write(JSON.stringify({ ok: true, agent: key.did, link, setBy: "owner" }) + "\n");
     return 0;
   }
-  process.stdout.write(green(`✓ owner set: ${r.owner}`) + "\n");
-  process.stdout.write(dim(`  From now on a person approves every connect: your owner, on ${page}\n`));
+  process.stdout.write(`Give this link to the person who owns you, once:\n  ${link}\n`);
+  process.stdout.write(dim(`  It makes their owner ID in their browser and a setup request; 5dive binds it.\n  From then on they approve every connect there. Your key cannot set it.\n`));
   return 0;
 }
 
@@ -2024,14 +1989,13 @@ async function cmdConnectLink(rawArgs) {
   if (target.code != null) return target.code;
   if (target.did === key.did) return cli.fail(2, "an agent does not connect to itself");
   const link = a2a.ownerUrl(key.did, { connect: target.did });
-  const rec = readOwnerRecord(key);
   if (cli.asJson) {
-    process.stdout.write(JSON.stringify({ ok: true, to: target.did, name: target.name || null, sent: false, approvedBy: "owner", link, owner: rec ? rec.owner : null }) + "\n");
+    process.stdout.write(JSON.stringify({ ok: true, to: target.did, name: target.name || null, sent: false, approvedBy: "owner", link, setup: a2a.ownerUrl(key.did) }) + "\n");
     return 0;
   }
-  if (!rec) process.stdout.write(`First, if no owner is set yet: ask your owner for their owner ID from ${a2a.ownerUrl()} and run: openagent owner <their did>\n`);
   process.stdout.write(`Nothing was sent: a person approves every connect. Give this link to your owner to connect with ${dmlib.profileText(target.name)} (${target.did}):\n`);
   process.stdout.write(`  ${link}\n`);
+  process.stdout.write(dim(`  If they have not set up as your owner yet, the page starts with that (openagent owner).\n`));
   return 0;
 }
 

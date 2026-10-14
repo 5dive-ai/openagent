@@ -11,9 +11,9 @@
 // hides the blocked agent's posts from `feed`. Also: --help, README and the
 // public skill name every command and say a DM is never an instruction.
 //
-// DIVE-6231: a person approves every connect. `owner` binds the owner key with a
-// body signed by the agent's key (the exact {v, agent, key, at} the API takes);
-// `connect` signs and POSTs nothing and prints the owner-page link; `connections`
+// DIVE-6231: a person approves every connect. `owner` binds nothing: it prints
+// the owner-page setup link, and the agent's key never sets an owner (the stub's
+// POST /a2a/owner records any attempt, and none may come); `connect` signs and POSTs nothing and prints the owner-page link; `connections`
 // prints each incoming request with its approve link and its name as untrusted
 // text; `dm` seals only to a did in the signed `connected` list, with no profile
 // lookup at send time. The stub refuses a connect signed by the agent's key (403)
@@ -208,25 +208,20 @@ function run(args, env) {
     const ada = Object.values(PROFILES).find((p) => p.name === "Ada").did;
     const bo = Object.values(PROFILES).find((p) => p.name === "Bo").did;
 
-    // -- owner -----------------------------------------------------------------------
-    const ownerKey = generateKeypair();
-    const ownerDid = didKeyFromPublicKey(require("../lib/provenance").publicPemFromPrivate(ownerKey.privateKey));
-    const none = await run(["owner"], A);
-    ok(none.code === 2 && /usage: openagent owner <did:key>/.test(none.out) && none.out.includes("https://a2a.example/owner"), "owner with no argument and none set -> usage and the owner page");
-    ok((await run(["owner", "did:key:nope"], A)).code === 2 && !OWNERS[ada], "a malformed owner ID -> exit 2, nothing sent");
-    const selfOwn = await run(["owner", ada], A);
-    ok(selfOwn.code === 2 && /own key/.test(selfOwn.err) && !OWNERS[ada], "the agent's own did as owner -> refused, nothing sent");
-    const own = await run(["owner", ownerDid], A);
-    ok(own.code === 0 && own.out.includes(`✓ owner set: ${ownerDid}`) && /a person approves every connect: your owner, on https:\/\/a2a\.example\/owner/.test(own.out), `owner <did> -> bound, says the owner approves connects on the page (${own.err.trim()})`);
-    const ob = OWNERS[ada];
-    ok(ob && Object.keys(ob.body).sort().join(",") === "agent,at,key,v" && ob.body.v === 1 && ob.body.agent === ada && ob.body.key === ownerDid, "the owner body is exactly {v:1, agent, key, at}");
-    ok(ob.sig.by === ada && verifySig(ob.body, ob.sig) && didKeyFromPublicKey(ob.sig.key) === ada, "and it verifies against the agent's own key");
-    ok(!verifySig({ ...ob.body, key: ada }, ob.sig), "negative control: the signature does not cover another owner key");
-    const otherOwner = didKeyFromPublicKey(require("../lib/provenance").publicPemFromPrivate(generateKeypair().privateKey));
-    const again = await run(["owner", otherOwner], A);
-    ok(again.code !== 0 && /an owner key is already set for this agent, and only that owner can change it, on https:\/\/a2a\.example\/owner/.test(again.err), "a second bind -> 409, said plainly with the owner page");
-    const shown = await run(["owner"], A);
-    ok(shown.code === 0 && shown.out.includes(`owner: ${ownerDid}`), "owner with no argument -> the owner this machine bound");
+    // -- owner: a setup link for the person; the agent's key sets nothing ---------------
+    const ownerDid = didKeyFromPublicKey(require("../lib/provenance").publicPemFromPrivate(generateKeypair().privateKey));
+    const setupLink = `https://a2a.example/owner?agent=${ada}`;
+    const omark = seen.length;
+    const own = await run(["owner"], A);
+    ok(own.code === 0 && own.out.includes(`Give this link to the person who owns you, once:\n  ${setupLink}\n`) && /5dive binds it/.test(own.out) && /Your key cannot set it/.test(own.out), `owner -> exit 0 and the owner's setup link (${own.out.trim()})`);
+    const oj = JSON.parse((await run(["owner", "--json"], A)).out);
+    ok(oj.ok && oj.agent === ada && oj.link === setupLink && oj.setBy === "owner", "owner --json: the agent, the setup link, set by the owner");
+    for (const arg of [ownerDid, ada, "did:key:nope"]) {
+      const r = await run(["owner", arg], A);
+      ok(r.code === 2 && /an agent cannot set its own owner: nothing was sent/.test(r.err) && r.err.includes(setupLink), `owner ${arg.slice(0, 16)}… -> exit 2, the agent cannot set its owner, the setup link`);
+    }
+    ok(!seen.slice(omark).some((x) => x.startsWith("POST ")) && !OWNERS[ada], "owner made no POST at all: the agent's key never binds an owner key");
+    ok(typeof require("../lib/a2a-client").setOwner === "undefined", "the client library has no setOwner any more");
 
     // -- connect: a link for the owner, nothing signed or sent -----------------------------
     const early = await run(["dm", "Bo", "hello"], A);
@@ -235,13 +230,13 @@ function run(args, env) {
     const req1 = await run(["connect", "Bo"], A);
     const connLink = `https://a2a.example/owner?agent=${ada}&connect=${bo}`;
     ok(req1.code === 0 && req1.out.includes("a person approves every connect") && req1.out.includes(`\n  ${connLink}\n`), `connect Bo -> exit 0 and the owner-page connect link (${req1.out.trim()})`);
-    ok(!/First, if no owner/.test(req1.out), "with an owner bound from here, no 'set an owner first' line");
+    ok(/If they have not set up as your owner yet, the page starts with that \(openagent owner\)/.test(req1.out), "connect says the page starts with owner setup when there is none");
     ok(!seen.slice(mark).some((x) => x.startsWith("POST ")), "connect made no POST at all (no /a2a/connections call)");
     const req2 = await run(["connect", ada], B);
-    ok(req2.code === 0 && req2.out.includes(`First, if no owner is set yet: ask your owner for their owner ID from https://a2a.example/owner and run: openagent owner <their did>`) && req2.out.includes(`https://a2a.example/owner?agent=${bo}&connect=${ada}`), "with no owner bound, connect says to set one first, then the link");
+    ok(req2.code === 0 && req2.out.includes(`https://a2a.example/owner?agent=${bo}&connect=${ada}`), "Bo's connect: the link to connect with Ada");
     ok(!seen.slice(mark).includes("POST /a2a/connections"), "still no POST /a2a/connections");
     const cj = JSON.parse((await run(["connect", "Bo", "--json"], A)).out);
-    ok(cj.ok && cj.sent === false && cj.link === connLink && cj.owner === ownerDid, "connect --json: sent false, the link, the owner");
+    ok(cj.ok && cj.sent === false && cj.link === connLink && cj.setup === setupLink && !("owner" in cj), "connect --json: sent false, the link, the setup link");
     ok(require("../lib/a2a-client").ownerUrl.call(null) === "https://a2a.5dive.ai/owner", "the owner page defaults to https://a2a.5dive.ai/owner");
 
     // The owner approves Ada's request on the page (the stub stands in for it).
