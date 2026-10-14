@@ -266,6 +266,78 @@ Tooling: `openagent delegation mint|verify|revoke|attribute` and
   own canonical body, so a relayed handshake cannot mint or alter a receipt. Treat
   the handshake as a liveness signal, not a secure channel.
 
+## Agent bundle (`agent.tar.gz`, bundle version 1)
+
+A persona says who an agent is. A **bundle** carries the agent itself from one
+harness to another: its persona, its skills and, optionally, its memory files, in
+one gzip-compressed tar file. The `openagent` CLI writes one with `openagent export`
+and reads one with `openagent import`; the 5dive CLI writes the same file with
+`5dive agent export --format=pack` and reads it with `5dive agent import`.
+
+### Members
+
+| Path | Required | What it is |
+|---|---|---|
+| `manifest.json` | yes | the manifest (below); the archive's first member |
+| `<id>.persona.yaml` | yes | the persona, byte for byte. Its name is whatever `manifest.persona` says, at the top level. `<id>.persona.yaml` is the convention; 5dive writes `persona.yaml` |
+| `skills/<name>/SKILL.md` | no | one directory per skill, `SKILL.md` plus any files beside it (scripts, references), in the [Agent Skills](https://agentskills.io) layout. `<name>` matches `[A-Za-z0-9][A-Za-z0-9._-]*` |
+| `memory/*.md` | no | memory files, flat. The canonical shape is one fact per file with YAML frontmatter (`name`, `description`, `metadata.type`) and a `MEMORY.md` index, but a plain export copies the harness's memory files as they are |
+| anything else | no | a writer's own files (5dive: `CLAUDE.md`, `avatar.png`). Readers that do not know them keep them or ignore them, and never fail on them |
+
+Every member is a regular file. A reader refuses a symlink, a hardlink, a device,
+an absolute path, a `..` segment, a duplicate path, a member over 10 MB, or a
+bundle over 64 MB unpacked.
+
+### Manifest
+
+```json
+{
+  "bundle_version": 1,
+  "openagent": "0.51.0",
+  "source_harness": "openclaw",
+  "created_at": "2026-10-14T05:00:00Z",
+  "persona": "quill.persona.yaml",
+  "files": {
+    "quill.persona.yaml": "<sha256 hex>",
+    "skills/changelog/SKILL.md": "<sha256 hex>",
+    "memory/MEMORY.md": "<sha256 hex>"
+  }
+}
+```
+
+- `bundle_version` (integer, required): this section is version `1`. A reader refuses a newer version.
+- `openagent` (string): the OpenAgent release whose bundle section the writer implements.
+- `source_harness` (string): where the agent was exported from (`hermes`, `openclaw`, `claude-code`, `codex`, `5dive`, ...).
+- `created_at` (string): ISO-8601 UTC, to the second.
+- `persona` (string, required): the persona member's path.
+- `files` (object, required): every member except `manifest.json`, mapped to the sha256 of its bytes. A reader refuses a bundle with a member that is missing, unlisted or does not match.
+- Any other top-level key belongs to the tool that wrote it (5dive: `packFormat`, `agentName`, `config`, `skills`, `plugins`, `hooks`, `includes`). Readers ignore what they do not know. A tool that re-exports an agent it imported keeps those keys and members, so an agent that passes through a harness comes back out whole.
+
+### No secrets
+
+A bundle never carries a secret. A writer refuses to write one, and a reader refuses
+to read one, when any text member holds a secret-shaped string: a private key, an
+API token (`sk-`, `ghp_`, `xoxb-`, `AKIA`, `AIza`, a JWT, ...) or a `password=` /
+`api_key:` assignment whose value looks real. These are the same shapes the a2a post
+guard refuses. The refusal names the file and line, never the value.
+
+### Where each harness keeps the parts
+
+| Harness | Persona | Skills | Memory |
+|---|---|---|---|
+| Hermes | `~/.hermes/SOUL.md` | `~/.hermes/skills/[<category>/]<name>/` | `~/.hermes/memories/*.md` |
+| OpenClaw | `~/.openclaw/workspace/AGENTS.md`, `SOUL.md`, `IDENTITY.md` | `<workspace>/skills/<name>/` (also reads `~/.openclaw/skills`) | `<workspace>/MEMORY.md` (as `memory/MEMORY.md`) + `<workspace>/memory/*.md` |
+| Claude Code | `~/.claude/CLAUDE.md` | `~/.claude/skills/<name>/` | `~/.claude/projects/<project slug>/memory/*.md` |
+| Codex | `~/.codex/AGENTS.md` | `~/.codex/skills/<name>/` (also reads `~/.agents/skills`) | `~/.codex/memories/*.md` |
+
+`$HERMES_HOME`, `$CLAUDE_CONFIG_DIR` and `$CODEX_HOME` replace the home-level
+directory. Import puts the persona in the way `install` does, above what the
+harness already wrote. It never overwrites a skill or memory file that holds other
+content unless told to. Moving memory is a plain copy: no rewriting, no model, no
+network. A harness that keeps memory in another shape reads the files as plain
+notes. Converting them (distilling, scrubbing, reshaping) is a tool's job on top of
+the format, not part of it.
+
 ## Design rules
 
 1. **One face, forever.** The whole point is consistency. Changing the *likeness* is a new identity, not an edit. Re-rendering `ref` from the same `face.recipe` (same model, prompt, seed) is not a change — it's the same face, reproduced; that's exactly what the recipe is for.

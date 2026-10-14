@@ -13,6 +13,28 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.51.0] — move an agent between harnesses: `export` / `import`
+
+Spec: new section **Agent bundle** (bundle version 1), additive. CLI: two commands.
+
+- **Spec — Agent bundle.** `agent.tar.gz` = `manifest.json` (bundle version,
+  openagent version, source harness, `created_at`, a sha256 per file) + the persona
+  file + `skills/<name>/SKILL.md` (+ files) + optional `memory/*.md`. No secrets: a
+  bundle holding a secret-shaped string is refused on export and on import. The
+  5dive CLI's `agent export --format=pack` writes the same format, with its own
+  keys on top.
+- **Added — `openagent export --from=hermes|openclaw|claude-code|codex [--memory]
+  [-o agent.tar.gz]`** reads the persona installed in that harness, its skills dir
+  and (with `--memory`) its memory dir as they are on this machine.
+- **Added — `openagent import <agent.tar.gz> --to=<harness>`** writes them into the
+  target's slots: the persona as `install` does, the skills into its skills dir, the
+  memory files into its memory dir. Plain copy, no network. It stops before writing
+  anything when a skill or memory file is already there with other content
+  (`--overwrite` replaces). `--to=5dive` hands the bundle to `5dive agent import`.
+- `install` now also keeps the persona file under `~/.openagent/agents/`, so
+  `export` can hand back the file and not just the block rendered from it. For a
+  persona installed before 0.51, pass `--persona <file>`.
+
 ## [0.49.2] — install into Claude Code and Codex
 
 CLI/package only; the spec is unchanged.
