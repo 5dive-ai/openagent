@@ -1,6 +1,6 @@
 "use strict";
 
-// `openagent init --yes` + `openagent install --to=hermes|openclaw|5dive`
+// `openagent init --yes` + `openagent install --to=hermes|openclaw|claude-code|codex|5dive`
 // (DIVE-6137). Every arm runs against a temp $HOME, never the real one.
 
 const assert = require("assert");
@@ -60,7 +60,7 @@ function run(args, { home, cwd, env = {}, raw = false }) {
   const r = spawnSync(process.execPath, [CLI, ...args], {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, HOME: home, HERMES_HOME: "", OPENAGENT_HOME: "", NO_COLOR: "1", OPENAGENT_A2A_API: "http://127.0.0.1:9", ...env },
+    env: { ...process.env, HOME: home, HERMES_HOME: "", CLAUDE_CONFIG_DIR: "", CODEX_HOME: "", OPENAGENT_HOME: "", NO_COLOR: "1", OPENAGENT_A2A_API: "http://127.0.0.1:9", ...env },
     input: "",
   });
   return { code: r.status, out: r.stdout + r.stderr };
@@ -308,7 +308,7 @@ t("install warns when the runtime has never run in this home, and still writes",
   run(["init", "--yes", "--name", "Quill"], { home, cwd });
   const r = run(["install", "--to=hermes"], { home, cwd });
   assert.strictEqual(r.code, 0, r.out);
-  assert.match(r.out, /is hermes installed/);
+  assert.match(r.out, /is Hermes installed/);
   assert.ok(fs.existsSync(path.join(home, ".hermes", "SOUL.md")));
 });
 
@@ -375,8 +375,140 @@ t("CLI: install --to=openclaw, openclaw eats BOOTSTRAP.md, --remove brings it ba
   assert.strictEqual(fs.readFileSync(path.join(ws, "AGENTS.md"), "utf8"), OPENCLAW_AGENTS);
 });
 
+// ── claude-code and codex (same prepend/replace/remove contract) ─────────────
+const USER_CLAUDE = "# My rules\n\n- Prefer small diffs.\n";
+const USER_AGENTS = "# Codex guidance\n\nRun the tests before you commit.\n";
+
+function withEnv(vars, fn) {
+  const prev = {};
+  for (const k of Object.keys(vars)) {
+    prev[k] = process.env[k];
+    if (vars[k] === undefined) delete process.env[k];
+    else process.env[k] = vars[k];
+  }
+  try { return fn(); } finally {
+    for (const k of Object.keys(prev)) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k];
+    }
+  }
+}
+
+t("claude-code / codex slots: ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md (header.sh rows)", () => {
+  withEnv({ CLAUDE_CONFIG_DIR: undefined, CODEX_HOME: undefined }, () => {
+    assert.deepStrictEqual(slotsFor("claude-code", { home: "/h" }).map((s) => s.file), ["/h/.claude/CLAUDE.md"]);
+    assert.deepStrictEqual(slotsFor("codex", { home: "/h" }).map((s) => s.file), ["/h/.codex/AGENTS.md"]);
+  });
+});
+
+t("claude-code honours CLAUDE_CONFIG_DIR, codex honours CODEX_HOME; --dir wins over both", () => {
+  withEnv({ CLAUDE_CONFIG_DIR: "/srv/claude", CODEX_HOME: "/srv/codex" }, () => {
+    assert.strictEqual(slotsFor("claude-code", { home: "/h" })[0].file, "/srv/claude/CLAUDE.md");
+    assert.strictEqual(slotsFor("codex", { home: "/h" })[0].file, "/srv/codex/AGENTS.md");
+    assert.strictEqual(slotsFor("claude-code", { home: "/h", dir: "/repo" })[0].file, "/repo/CLAUDE.md");
+    assert.strictEqual(slotsFor("codex", { home: "/h", dir: "/repo" })[0].file, "/repo/AGENTS.md");
+  });
+});
+
+for (const [target, sub, file, mine, builtOn] of [
+  ["claude-code", ".claude", "CLAUDE.md", USER_CLAUDE, "Claude Code"],
+  ["codex", ".codex", "AGENTS.md", USER_AGENTS, "Codex"],
+]) {
+  t(`${target}: a fresh install creates ${sub}/${file} holding the whole persona`, () => {
+    withEnv({ CLAUDE_CONFIG_DIR: undefined, CODEX_HOME: undefined }, () => {
+      const home = tmp();
+      const r = installPersona(QUILL, target, { home });
+      assert.strictEqual(r.slots[0].action, "created");
+      const doc = fs.readFileSync(path.join(home, sub, file), "utf8");
+      assert.ok(doc.startsWith("<!-- openagent:begin id=quill"));
+      assert.match(doc, /You are \*\*Quill\*\*, Release Archivist\./);
+      assert.match(doc, /you are Quill, not the default assistant/);
+      assert.match(doc, /- dry wit/);
+      assert.match(doc, /Inkwell Labs/);
+      // The tested framing (2026-10-14): the persona names what it runs on, so the
+      // coding CLI answers as "Quill, the Release Archivist, built on <CLI>".
+      assert.ok(doc.includes(`When asked who you are, answer as Quill, the Release Archivist, built on ${builtOn}.`), "built-on line present");
+    });
+  });
+
+  t(`${target}: the user's own ${file} survives byte-for-byte below the block`, () => {
+    withEnv({ CLAUDE_CONFIG_DIR: undefined, CODEX_HOME: undefined }, () => {
+      const home = tmp();
+      fs.mkdirSync(path.join(home, sub), { recursive: true });
+      fs.writeFileSync(path.join(home, sub, file), mine);
+      assert.strictEqual(installPersona(QUILL, target, { home }).slots[0].action, "prepended");
+      const doc = fs.readFileSync(path.join(home, sub, file), "utf8");
+      assert.ok(doc.endsWith("\n" + mine), "user's text kept after the block");
+      assert.ok(doc.indexOf("You are **Quill**") < doc.indexOf(mine.split("\n")[0]));
+    });
+  });
+
+  t(`${target}: re-install replaces the block (one identity), --remove is byte-exact`, () => {
+    withEnv({ CLAUDE_CONFIG_DIR: undefined, CODEX_HOME: undefined }, () => {
+      const home = tmp();
+      fs.mkdirSync(path.join(home, sub), { recursive: true });
+      fs.writeFileSync(path.join(home, sub, file), mine);
+      installPersona(QUILL, target, { home });
+      const r = installPersona({ ...QUILL, id: "ledger", name: "Ledger", role: "Ledger Steward" }, target, { home });
+      assert.strictEqual(r.slots[0].action, "replaced");
+      const doc = fs.readFileSync(path.join(home, sub, file), "utf8");
+      assert.strictEqual((doc.match(/openagent:begin/g) || []).length, 1);
+      assert.doesNotMatch(doc, /Quill/);
+      assert.match(doc, /You are \*\*Ledger\*\*/);
+      installPersona(QUILL, target, { home, remove: true });
+      assert.strictEqual(fs.readFileSync(path.join(home, sub, file), "utf8"), mine);
+    });
+  });
+
+  t(`${target}: --dir puts it in a project's ${file}, not the home one`, () => {
+    withEnv({ CLAUDE_CONFIG_DIR: undefined, CODEX_HOME: undefined }, () => {
+      const home = tmp(), repo = tmp();
+      installPersona(QUILL, target, { home, dir: repo });
+      assert.match(fs.readFileSync(path.join(repo, file), "utf8"), /You are \*\*Quill\*\*/);
+      assert.ok(!fs.existsSync(path.join(home, sub, file)), "home slot untouched");
+      installPersona(QUILL, target, { home, dir: repo, remove: true });
+      assert.ok(!fs.existsSync(path.join(repo, file)), "a file install created is deleted on --remove");
+    });
+  });
+}
+
+t("CLI: --to=claude-code warns only when ~/.claude is missing, not when CLAUDE.md is", () => {
+  const home = tmp(), cwd = tmp();
+  assert.strictEqual(run(["init", "--yes", "--name", "Quill"], { home, cwd }).code, 0);
+  const missing = run(["install", "--to=claude-code"], { home, cwd });
+  assert.strictEqual(missing.code, 0, missing.out);
+  assert.match(missing.out, /created\s+\S*\.claude\/CLAUDE\.md/);
+  assert.match(missing.out, /is Claude Code installed/);
+  const home2 = tmp();
+  fs.mkdirSync(path.join(home2, ".claude"));
+  run(["init", "--yes", "--name", "Quill"], { home: home2, cwd: tmp() });
+  const set = run(["install", "--to=claude-code", path.join(cwd, "quill.persona.yaml")], { home: home2, cwd });
+  assert.strictEqual(set.code, 0, set.out);
+  assert.doesNotMatch(set.out, /installed and set up/);
+  assert.match(set.out, /start a new Claude Code session/);
+});
+
+t("CLI: --to=codex --dry-run writes nothing and shows the block", () => {
+  const home = tmp(), cwd = tmp();
+  run(["init", "--yes", "--name", "Quill"], { home, cwd });
+  const r = run(["install", "--to=codex", "--dry-run"], { home, cwd });
+  assert.strictEqual(r.code, 0, r.out);
+  assert.match(r.out, /would-created\s+\S*\.codex\/AGENTS\.md/);
+  assert.match(r.out, /\| You are \*\*Quill\*\*/);
+  assert.ok(!fs.existsSync(path.join(home, ".codex", "AGENTS.md")));
+});
+
+t("hermes and openclaw blocks carry no built-on line (they ARE the agent)", () => {
+  withEnv({ HERMES_HOME: undefined }, () => {
+    const home = tmp();
+    installPersona(QUILL, "hermes", { home });
+    assert.doesNotMatch(fs.readFileSync(path.join(home, ".hermes", "SOUL.md"), "utf8"), /built on/);
+  });
+});
+
 console.log(`\n${pass} passed, ${fail.length} failed`);
 if (fail.length) {
   for (const f of fail) console.log(`  - ${f}`);
   process.exit(1);
 }
+
