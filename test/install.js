@@ -52,7 +52,7 @@ const QUILL = {
   voice: { written: { rules: ["dry wit", "dates in ISO"], sample: "2026-10-13: shipped." } },
 };
 
-// `init` publishes to a2a.5dive.ai by default (DIVE-6135): every init here runs
+// `init` publishes to openagent.5dive.ai/feed by default (DIVE-6135): every init here runs
 // --no-publish (unless an arm opts out with raw), and the a2a API points at a
 // closed local port, so no arm can ever reach the real network.
 function run(args, { home, cwd, env = {}, raw = false }) {
