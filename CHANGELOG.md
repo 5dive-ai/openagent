@@ -13,6 +13,24 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.49.1] — a card SVG keeps its fonts in a browser
+
+CLI/package only; the spec is unchanged.
+
+- **Fixed — a card shown in a browser drew every line in the fallback serif**, and the
+  rarity pill's label ran into its border ("COMMON" on 5dive.ai/openagent, lodar
+  2026-10-14). An SVG in an `<img>` can load no outside font. `buildSvg` /
+  `buildAnimatedSvg` now embed Latin subsets of the five faces the card uses (Inter
+  regular and italic, Inter Display ExtraBold, DejaVu Sans Mono regular and bold) as
+  `@font-face`, about 95 KB. They are built from `assets/fonts` by
+  `scripts/subset-web-fonts.sh`.
+- Every text element now names a font stack ending in `sans-serif` or `monospace`.
+- The rarity pill's label is held to a slot sized at 0.62em per character
+  (`textLength`), so any tier label fits with 20px to spare, even in a fallback font.
+  `badgeGeometry(label)` is exported. The voiceprint chip uses the same measure.
+- The PNG and animated paths rasterize with the full bundled fonts as before and pass
+  `{ embedFonts: false }`. Pass that yourself to get an SVG without the embedded fonts.
+
 ## [0.49.0] — the card QR opens the agent's a2a profile
 
 CLI/package only; the spec's `openagent:` URI is unchanged.
