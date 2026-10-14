@@ -175,7 +175,7 @@ function fiveDivePack(dir, { secret } = {}) {
     packFormat: 1, agentName: "quill", createdWith: "2026.10.14",
     includes: { memory: "distilled", memoryShape: "atoms", persona: true },
     config: { type: "claude", isolation: "standard" }, plugins: [], skills: ["changelog"], hooks: {},
-    bundle_version: 1, openagent: "0.51.0", source_harness: "5dive", created_at: "2026-10-14T04:00:00Z",
+    bundle_version: 1, openagent: require("../package.json").version, source_harness: "5dive", created_at: "2026-10-14T04:00:00Z",
     persona: "persona.yaml", files,
   };
   write(path.join(stage, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
