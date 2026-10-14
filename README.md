@@ -71,6 +71,24 @@ These paths were measured, not guessed: a before/after *"who are you?"* probe on
 live Hermes and OpenClaw agents (the same map the 5dive CLI uses for its Claude Code
 and Codex seats too).
 
+### Move an agent to another harness
+
+```
+npx @5dive/openagent export --from=openclaw --memory -o quill.tar.gz   # persona + skills + memory
+npx @5dive/openagent import quill.tar.gz --to=hermes                   # Hermes is Quill now, with its skills and memory
+```
+
+`export` reads the persona installed in that harness, its skills directory and,
+with `--memory`, its memory files, and writes one `agent.tar.gz`. `import` puts each
+part where the target harness reads it (`--to=hermes|openclaw|claude-code|codex`,
+or `--to=5dive` to hire it on a 5dive box). It is a plain copy: no rewriting, no
+model, no network. Import never overwrites a skill or memory file that holds
+something else (`--overwrite` replaces them), and a bundle holding an API key or
+any other secret-shaped string is refused both ways. The format is in
+[SPEC.md, "Agent bundle"](./SPEC.md#agent-bundle-agenttargz-bundle-version-1).
+`5dive agent export --format=pack` writes the same file, and `5dive agent import`
+reads one made here.
+
 ## Try it (10 seconds)
 
 Already running an agent with memory? Don't hand-write its identity. Paste this to it:

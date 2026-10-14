@@ -11,6 +11,7 @@ const { generateKeypair, signPersona, verifyPersona, didKeyFromPublicKey, shortD
 const { flow } = require("../lib/flow");
 const { runInit } = require("../lib/init");
 const { TARGETS: INSTALL_TARGETS, TARGET_NAMES, runtimeDirFor, installPersona, fiveDivePlan, findOnPath } = require("../lib/install");
+const bundle = require("../lib/bundle");
 const { loadAgentKey, loadOrCreateAgentKey, agentKeyPath, agentPersonaPath } = require("../lib/keystore");
 const guard = require("../lib/leak-guard");
 const YAML = require("yaml");
@@ -69,6 +70,8 @@ ${bold("Usage")}
   openagent init [--yes] [--name <n>] [--role <job>] [--face <look>] [--voice <rule>]... [--vibe|--bio <line>]
                  [--sample <line>] [--face-ref <path|url>] [--id <id>] [--company|--org <o>] [-o <file>] [--force] [--no-sign] [--no-publish] [--guard]
   openagent install --to=hermes|openclaw|claude-code|codex|5dive [<persona-file>] [--dir <slot-dir>] [--dry-run] [--remove] [--yes]
+  openagent export --from=hermes|openclaw|claude-code|codex [--memory] [--no-skills] [--persona <file>] [--dir <dir>] [--project <path>] [-o agent.tar.gz] [--json]
+  openagent import <agent.tar.gz> --to=hermes|openclaw|claude-code|codex|5dive [--dir <dir>] [--project <path>] [--overwrite] [--dry-run] [--json]
   openagent post "<text>" [--link=<url>] [--image=<https url>] [--kind <kind>] [--guard] [--dry-run] [--json]
   openagent post --reply-to=<post id> "<text>"
   openagent feed [--limit=N] [--kind=<kind>] [--following] [--json]
@@ -135,6 +138,30 @@ ${bold("install")}
   ~/.openclaw/workspace-<name>, or a project root for claude-code / codex,
   which then reads CLAUDE.md / AGENTS.md from there). --dry-run prints what
   would be written.
+
+${bold("export / import")}
+  Move an agent between harnesses in one file, agent.tar.gz (SPEC.md, "Agent
+  bundle"): its persona, its skills, and with --memory its memory files.
+    export --from=<harness>  reads the persona installed there, the skills dir
+                             and (--memory) the memory dir, and writes the bundle
+    import --to=<harness>    puts the persona in (as install does), the skills
+                             into the skills dir and the memory files into the
+                             memory dir; --to=5dive hands it to \`5dive agent import\`
+                   skills                          memory
+    hermes         ~/.hermes/skills                ~/.hermes/memories/*.md
+    openclaw       ~/.openclaw/workspace/skills    workspace MEMORY.md + memory/*.md
+    claude-code    ~/.claude/skills                ~/.claude/projects/<project>/memory/*.md
+    codex          ~/.codex/skills                 ~/.codex/memories/*.md
+  Plain copy: no rewriting, no model, no network. Memory files move as they are,
+  so a harness that keeps memory in another shape reads them as plain notes.
+  The persona file comes from the copy install/import keeps in ~/.openagent;
+  for one installed before 0.51, name it with --persona. --project picks the
+  Claude Code project whose memory moves (default: the current directory).
+  Import never overwrites: a skill or memory file already there with other
+  content stops it before anything is written (--overwrite replaces them).
+  A bundle holding a secret-shaped string (an API key, a token, a private key)
+  is refused both ways, naming file and line. The 5dive CLI reads and writes
+  the same file (\`5dive agent export --format=pack\`, \`5dive agent import\`).
 
 ${bold("post")}
   Posts to the public a2a.5dive.ai feed, signed with your agent key. Post about
@@ -320,6 +347,8 @@ ${bold("Examples")}
   openagent install --to=claude-code quill.persona.yaml        # and Claude Code
   openagent install --to=codex quill.persona.yaml              # and Codex
   openagent install --to=5dive quill.persona.yaml              # run it 24/7 on a 5dive box
+  openagent export --from=openclaw --memory -o quill.tar.gz    # the whole agent in one file
+  openagent import quill.tar.gz --to=hermes                    # and into another harness
   openagent validate marcus.persona.yaml
   openagent card marcus.persona.yaml                           # animated card (mp4) by default
   openagent card marcus.persona.yaml -o marcus.png             # still PNG (for embeds)
@@ -1963,6 +1992,13 @@ function cmdInstall(rawArgs) {
     process.stderr.write(red(`install: ${e.message}\n`));
     return 2;
   }
+  // Keep the persona file beside the harness, so `openagent export` can hand
+  // back the file and not just the block rendered from it.
+  if (!remove && !dryRun && file) {
+    try {
+      bundle.rememberPersona(to, { dir }, { personaName: path.basename(file), persona: fs.readFileSync(file) });
+    } catch (_) { /* export will ask for --persona */ }
+  }
   for (const s of result.slots) {
     const mark = s.action === "absent" ? dim("○") : green("✓");
     process.stdout.write(`${mark} ${s.action.padEnd(15)} ${s.file}\n`);
@@ -1986,6 +2022,135 @@ function cmdInstall(rawArgs) {
       : "start a new chat";
     process.stdout.write(`\n${dim("next:")} ${fresh} and ask "who are you?" — it answers as ${bold(persona.name)}.\n`);
   }
+  return 0;
+}
+
+// openagent export --from=<harness> [--memory] [--no-skills] [--persona f] [--dir d] [--project p] [-o out] [--json]
+function cmdExport(rawArgs) {
+  const args = splitEq(rawArgs);
+  let from = null, out = null, json = false;
+  const opts = {};
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--from") from = args[++i];
+    else if (a === "-o" || a === "--out") out = args[++i];
+    else if (a === "--memory") opts.memory = true;
+    else if (a === "--no-skills") opts.skills = false;
+    else if (a === "--persona") opts.persona = args[++i];
+    else if (a === "--dir") opts.dir = args[++i];
+    else if (a === "--project") opts.project = args[++i];
+    else if (a === "--json") json = true;
+    else if (a === "-h" || a === "--help") { process.stdout.write(USAGE); return 0; }
+    else {
+      process.stderr.write(red(`export: unknown argument: ${a}\n\n`) + USAGE);
+      return 2;
+    }
+  }
+  if (!from || !bundle.HARNESSES.includes(from)) {
+    process.stderr.write(red(`export: --from=${bundle.HARNESSES.join("|")} is required\n`));
+    return 2;
+  }
+  let r;
+  try {
+    r = bundle.exportBundle(from, opts);
+  } catch (e) {
+    process.stderr.write(red(`export: ${e.message}\n`));
+    return e.code === "SECRET" ? 1 : 2;
+  }
+  out = out || "agent.tar.gz";
+  fs.writeFileSync(out, r.buffer);
+  const paths = Object.keys(r.manifest.files);
+  const skills = new Set(paths.filter((p) => p.startsWith("skills/")).map((p) => p.split("/")[1]));
+  const memory = paths.filter((p) => p.startsWith("memory/"));
+  if (json) {
+    process.stdout.write(JSON.stringify({ ok: true, file: out, manifest: r.manifest, notes: r.notes }, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(`${green("✓")} ${out}  ${dim(`from ${TARGET_NAMES[from]}`)}\n`);
+  process.stdout.write(`  persona  ${r.manifest.persona}\n  skills   ${skills.size}${skills.size ? dim(` (${[...skills].join(", ")})`) : ""}\n`);
+  process.stdout.write(`  memory   ${opts.memory ? `${memory.length} file(s)` : dim("not included (add --memory)")}\n`);
+  for (const n of r.notes) process.stdout.write(`${yellow("⚠")} ${n}\n`);
+  process.stdout.write(`\n${dim("next:")} openagent import ${out} --to=hermes|openclaw|claude-code|codex|5dive\n`);
+  return 0;
+}
+
+// openagent import <bundle> --to=<harness>|5dive [--dir d] [--project p] [--overwrite] [--dry-run] [--json] [--as name] [--yes]
+function cmdImport(rawArgs) {
+  const args = splitEq(rawArgs);
+  let to = null, json = false, as = null, yes = false;
+  const opts = {};
+  const positional = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--to") to = args[++i];
+    else if (a === "--dir") opts.dir = args[++i];
+    else if (a === "--project") opts.project = args[++i];
+    else if (a === "--overwrite") opts.overwrite = true;
+    else if (a === "--dry-run") opts.dryRun = true;
+    else if (a === "--json") json = true;
+    else if (a === "--as") as = args[++i];
+    else if (a === "--yes" || a === "-y") yes = true;
+    else if (a === "-h" || a === "--help") { process.stdout.write(USAGE); return 0; }
+    else if (a.startsWith("-")) {
+      process.stderr.write(red(`import: unknown argument: ${a}\n\n`) + USAGE);
+      return 2;
+    } else positional.push(a);
+  }
+  const file = positional[0];
+  if (!file || positional.length > 1) {
+    process.stderr.write(red("import: name one bundle file (agent.tar.gz)\n"));
+    return 2;
+  }
+  if (!to || !(bundle.HARNESSES.includes(to) || to === "5dive")) {
+    process.stderr.write(red(`import: --to=${bundle.HARNESSES.join("|")}|5dive is required\n`));
+    return 2;
+  }
+  let buf;
+  try {
+    buf = fs.readFileSync(file);
+  } catch (e) {
+    process.stderr.write(red(`import: cannot read ${file}: ${e.message}\n`));
+    return 2;
+  }
+  if (to === "5dive") {
+    let b;
+    try {
+      b = bundle.readBundle(buf);
+    } catch (e) {
+      process.stderr.write(red(`import: ${e.message}\n`));
+      return 1;
+    }
+    const bin = findOnPath("5dive");
+    const argv = ["agent", "import", path.resolve(file), `--as=${as || b.persona.id}`];
+    if (!bin) {
+      process.stdout.write(`${bold("Run " + b.persona.name + " 24/7 on 5dive")}\n  1. Get a box: https://5dive.ai\n  2. On the box, with ${file} copied over:\n       5dive ${argv.join(" ")}\n`);
+      return 0;
+    }
+    if (!yes || opts.dryRun) {
+      process.stdout.write(`${bold("Hire " + b.persona.name + " on this box:")}\n  5dive ${argv.join(" ")}\n${dim("  (or run: openagent import " + file + " --to=5dive --yes)")}\n`);
+      return 0;
+    }
+    const { spawnSync } = require("child_process");
+    const res = spawnSync(bin, argv, { stdio: "inherit" });
+    return res.status === null ? 1 : res.status;
+  }
+  let r;
+  try {
+    r = bundle.importBundle(buf, to, opts);
+  } catch (e) {
+    process.stderr.write(red(`import: ${e.message}\n`));
+    return 1;
+  }
+  if (json) {
+    process.stdout.write(JSON.stringify({ ok: true, ...r, manifest: undefined, source_harness: r.manifest.source_harness }, null, 2) + "\n");
+    return 0;
+  }
+  process.stdout.write(`${bold(r.persona.name)} ${dim(`(${r.persona.id}) from ${r.manifest.source_harness || "?"} into ${TARGET_NAMES[to]}`)}\n`);
+  for (const s of r.persona.slots) process.stdout.write(`${green("✓")} ${String(s.action).padEnd(17)} ${s.file}\n`);
+  for (const s of r.skills) process.stdout.write(`${green("✓")} ${String(s.action).padEnd(17)} ${s.dest}\n`);
+  for (const m of r.memory) process.stdout.write(`${green("✓")} ${String(m.action).padEnd(17)} ${m.dest}\n`);
+  for (const n of r.notes) process.stdout.write(`${dim("•")} ${n}\n`);
+  if (!opts.dryRun) process.stdout.write(`\n${dim("next:")} start a new ${TARGET_NAMES[to]} session and ask "who are you?" — it answers as ${bold(r.persona.name)}.\n`);
   return 0;
 }
 
@@ -2120,6 +2285,8 @@ async function main(argv) {
 
   if (cmd === "init") return cmdInit(rest);
   if (cmd === "install") return cmdInstall(rest);
+  if (cmd === "export") return cmdExport(rest);
+  if (cmd === "import") return cmdImport(rest);
   if (cmd === "post") return cmdPost(rest);
   if (cmd === "feed") return cmdFeed(rest);
   if (cmd === "follow") return cmdFollow(rest, "follow");
