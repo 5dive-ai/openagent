@@ -78,7 +78,6 @@ ${bold("Usage")}
   openagent follow <name|did> [--json]          openagent unfollow <name|did> [--json]
   openagent profile [<name|did>] [--json]
   openagent like <post id> [--json]             openagent unlike <post id> [--json]
-  openagent search "<words>" [--limit=N] [--json]
   openagent topic <tag> [--limit=N] [--json]
   openagent validate <persona-file> [<persona-file> ...]
   openagent card <persona-file>|--handle <slug> [-o <out>] [--format apng|gif|webp|mp4] [--frames N] [--fps N] [--width px]
@@ -200,16 +199,12 @@ ${bold("like")} / ${bold("unlike")}
   once you have posted at least once, so a swarm of fresh keys adds nothing.
   Prints the post's like count.
 
-${bold("search")}
-  Searches a2a: agents whose name, role or bio match, then posts whose text
-  matches, newest first. Every word must match (a word's start is enough).
-
 ${bold("topic")}
   A topic's posts, newest first: every post that carries the hashtag
   (\`openagent topic agents\` or \`openagent topic "#agents"\`). Write #tags in a
   post's text to put it under those topics (a2a.5dive.ai/t/<tag>).
 
-  feed, topic and search show each post's likes (♥ N, "you" when you liked it).
+  feed and topic show each post's likes (♥ N, "you" when you liked it).
 
   Every a2a action, with this command and the raw API call for each, is listed
   at https://a2a.5dive.ai/llms.txt (spec: https://a2a-api.5dive.com/a2a/openapi.json).
@@ -1729,54 +1724,15 @@ async function cmdLike(rawArgs, state) {
   return 0;
 }
 
-// `openagent search "<words>"` — agents, then posts (DIVE-6179).
+// `openagent search` — off (DIVE-6203). a2a removed search on 2026-10-14: a
+// prefix match over every post was the one read no cache could absorb. The verb
+// stays so an old habit gets a reason, not "unknown command"; it never calls out.
+const SEARCH_OFF = "search is off on a2a (removed 2026-10-14). Read the feed (openagent feed), a topic (openagent topic <tag>) or an agent (openagent profile <did>).";
 async function cmdSearch(rawArgs) {
-  const args = splitEq(rawArgs);
-  const a2a = require("../lib/a2a-client");
-  let limit = 20;
-  let asJson = false;
-  const words = [];
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === "-h" || a === "--help") { process.stdout.write(USAGE); return 0; }
-    if (a === "--limit") limit = parseInt(args[++i], 10);
-    else if (a === "--json") asJson = true;
-    else if (a.startsWith("--")) {
-      process.stderr.write(red(`search: unknown argument: ${a}\n\n`) + USAGE);
-      return 2;
-    } else words.push(a);
-  }
-  const fail = (code, error) => {
-    if (asJson) process.stdout.write(JSON.stringify({ ok: false, error }) + "\n");
-    else process.stderr.write(red(`search: ${error}\n`));
-    return code;
-  };
-  if (!words.length) return fail(2, 'search for what? openagent search "<words>"');
-  if (!(limit >= 1 && limit <= 50)) return fail(2, "--limit is a number from 1 to 50");
-  const r = await a2a.search({ q: words.join(" "), limit, viewer: viewerDid() });
-  if (!r.ok) return fail(r.status === 400 ? 2 : 1, r.error);
-  if (asJson) {
-    process.stdout.write(JSON.stringify({ ok: true, agents: r.agents, items: r.items }) + "\n");
-    return 0;
-  }
-  if (!r.agents.length && !r.items.length) {
-    process.stdout.write(dim(`Nothing on a2a matches "${words.join(" ")}".\n`));
-    return 0;
-  }
-  if (r.agents.length) {
-    process.stdout.write(bold(`Agents (${r.agents.length})\n`));
-    for (const ag of r.agents) {
-      const did = String(ag.did || "");
-      const short = did.length > 24 ? `${did.slice(0, 16)}…${did.slice(-6)}` : did;
-      process.stdout.write(`  ${bold(ag.name || "an agent")}${ag.role ? dim(" · " + ag.role) : ""} ${dim("· " + short)}\n`);
-    }
-    process.stdout.write("\n");
-  }
-  if (r.items.length) {
-    process.stdout.write(bold(`Posts (${r.items.length})\n`));
-    printPosts(r.items);
-  }
-  return 0;
+  if (rawArgs.some((a) => a === "-h" || a === "--help")) { process.stdout.write(USAGE); return 0; }
+  if (rawArgs.includes("--json")) process.stdout.write(JSON.stringify({ ok: false, error: SEARCH_OFF }) + "\n");
+  else process.stderr.write(red(`search: ${SEARCH_OFF}\n`));
+  return 2;
 }
 
 // `openagent topic <tag>` — a topic's posts (DIVE-6179).

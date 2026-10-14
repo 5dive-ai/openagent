@@ -25,10 +25,12 @@ const ROOT = path.join(__dirname, "..");
 const help = execFileSync(process.execPath, [path.join(ROOT, "bin", "openagent.js"), "--help"], { env: { ...process.env, NO_COLOR: "1" } }).toString();
 const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
 const skill = fs.readFileSync(path.join(ROOT, "skills", "a2a", "SKILL.md"), "utf8");
-for (const action of ["openagent like", "unlike <post id>", "openagent search", "openagent topic"]) {
+for (const action of ["openagent like", "unlike <post id>", "openagent topic"]) {
   for (const [name, text] of [["--help", help], ["README", readme], ["skill", skill]]) ok(text.includes(action), `${name} lists \`${action}\``);
 }
-ok(readme.includes("POST /a2a/likes") && readme.includes("/a2a/topics/agents") && readme.includes("/a2a/search?q="), "the README lists the like, topic and search calls");
+ok(readme.includes("POST /a2a/likes") && readme.includes("/a2a/topics/agents"), "the README lists the like and topic calls");
+// Search is off (DIVE-6203): nothing still teaches it.
+for (const [name, text] of [["--help", help], ["README", readme], ["skill", skill]]) ok(!text.includes("openagent search \"") && !text.includes("/a2a/search"), `${name} no longer teaches search`);
 
 // -- tagOf: the same rule as the API and the site ------------------------------
 ok(tagOf("#AI_Agents") === "aiagents" && tagOf("agents") === "agents" && tagOf("Developer tools") === "developertools", "tagOf lowercases and keeps letters and digits");
@@ -145,16 +147,13 @@ function run(args, env) {
     const own = await run(["like", POST_C], env);
     ok(own.code === 1 && /does not like its own post/.test(own.err), "liking your own post -> exit 1 with the API's reason");
 
-    // -- search ------------------------------------------------------------------------
+    // -- search is off (DIVE-6203): a reason, exit 2, and no call to the API --------
+    const before = seen.length;
     const s1 = await run(["search", "error", "bars"], env);
-    ok(s1.code === 0 && s1.out.includes("Posts (1)") && s1.out.includes(POST_A) && s1.out.includes("♥ 1 (you)"), "search \"error bars\" finds the post with its likes");
-    ok(seen.some((x) => x.startsWith("GET /a2a/search?q=error+bars&limit=20&viewer=")), "search sends q, limit and viewer");
-    const s2 = await run(["search", "bo"], env);
-    ok(s2.out.includes("Agents (1)") && /Bo · Eval skeptic · did:key:z6MkBoBo…/.test(s2.out), "search an agent's name lists the agent with role and short did");
-    ok(/Nothing on a2a matches/.test((await run(["search", "zzz"], env)).out), "no match -> says so");
-    ok((await run(["search"], env)).code === 2, "search with no words -> exit 2");
+    ok(s1.code === 2 && /search is off on a2a/.test(s1.err), "search -> exit 2, 'search is off'");
     const sj = JSON.parse((await run(["search", "eval", "--json"], env)).out);
-    ok(sj.ok && sj.agents.length === 1 && sj.items.length === 1, "search --json has agents and items");
+    ok(sj.ok === false && /search is off/.test(sj.error), "search --json -> ok:false with the reason");
+    ok(seen.length === before, "search never calls the API");
 
     // -- topic -------------------------------------------------------------------------
     const t1 = await run(["topic", "#Evals"], env);
