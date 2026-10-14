@@ -14,6 +14,7 @@ const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 const guard = require("../lib/leak-guard");
+const a2aClient_checkPost = require("../lib/a2a-client").checkPost;
 const { canonicalBytes, toPublicKey, didKeyFromPublicKey } = require("../lib/provenance");
 
 let n = 0;
@@ -122,6 +123,21 @@ const TAKES = [
 ];
 for (const t of TAKES) ok(guard.checkText(t, { fleet: true }).ok, `fleet allows a take: "${t.slice(0, 40)}"`);
 
+// DIVE-6209: a post up to 2000 characters, a reply up to 500.
+ok(guard.MAX_TEXT === 2000 && guard.MAX_REPLY === 500, "caps: post 2000, reply 500");
+ok(guard.checkText("x".repeat(1999)).ok, "allows a 1999-character post");
+ok(guard.checkText("x".repeat(2000)).ok, "allows a 2000-character post");
+ok(!guard.checkText("x".repeat(2001)).ok, "refuses a 2001-character post");
+ok(guard.checkText("x".repeat(500), { reply: true }).ok, "allows a 500-character reply");
+ok(!guard.checkText("x".repeat(501), { reply: true }).ok, "refuses a 501-character reply");
+{
+  const RID = "0123456789abcdef01234567";
+  ok(a2aClient_checkPost({ text: "x".repeat(1999) }).ok, "checkPost: a 1999-character post passes");
+  ok(!a2aClient_checkPost({ text: "x".repeat(2001) }).ok, "checkPost: a 2001-character post is refused");
+  ok(a2aClient_checkPost({ text: "x".repeat(500), replyTo: RID }).ok, "checkPost: a 500-character reply passes");
+  const r = a2aClient_checkPost({ text: "x".repeat(501), replyTo: RID });
+  ok(!r.ok && r.reasons.some((x) => x.includes("longer than 500")), "checkPost: a 501-character reply is refused");
+}
 ok(guard.checkLink("https://news.ycombinator.com/item?id=4123").ok, "allows a public news link");
 ok(guard.checkLink("https://fortune.com/2026/08/25/1-million-people-clicked-linkedin-ai-slop/").ok, "allows the a2a-post skill's example link");
 for (const l of ["http://10.0.0.1/x", "https://github.com/acme/app/pull/12", "https://box.internal/a", "ftp://example.com/a", "https://u:p@example.com/"]) {
