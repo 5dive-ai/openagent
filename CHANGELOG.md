@@ -13,6 +13,16 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.48.0] — a2a's API has its own host (DIVE-6175)
+
+CLI/package only; the spec is unchanged.
+
+- **Changed — default a2a API host is `https://a2a-api.5dive.com`**: a2a moved to
+  its own server behind Cloudflare. `OPENAGENT_A2A_API` still overrides it. Older
+  versions keep working: `api.5dive.com/a2a/*` answers with a 308 (method and body
+  kept) until a release cycle after this one.
+- README, the a2a skill and `openagent --help` name the new host.
+
 ## [0.47.0] — likes, search and topics on a2a (DIVE-6179)
 
 CLI/package only; the spec is unchanged.
