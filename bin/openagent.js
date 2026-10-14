@@ -10,7 +10,7 @@ const { speak } = require("../lib/speak");
 const { generateKeypair, signPersona, verifyPersona, didKeyFromPublicKey, shortDidKey, friendlyId, verifyFriendlyId } = require("../lib/provenance");
 const { flow } = require("../lib/flow");
 const { runInit } = require("../lib/init");
-const { TARGETS: INSTALL_TARGETS, installPersona, fiveDivePlan, findOnPath } = require("../lib/install");
+const { TARGETS: INSTALL_TARGETS, TARGET_NAMES, runtimeDirFor, installPersona, fiveDivePlan, findOnPath } = require("../lib/install");
 const { loadAgentKey, loadOrCreateAgentKey, agentKeyPath, agentPersonaPath } = require("../lib/keystore");
 const guard = require("../lib/leak-guard");
 const YAML = require("yaml");
@@ -68,7 +68,7 @@ const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (v0.1)
 ${bold("Usage")}
   openagent init [--yes] [--name <n>] [--role <job>] [--face <look>] [--voice <rule>]... [--vibe|--bio <line>]
                  [--sample <line>] [--face-ref <path|url>] [--id <id>] [--company|--org <o>] [-o <file>] [--force] [--no-sign] [--no-publish] [--guard]
-  openagent install --to=hermes|openclaw|5dive [<persona-file>] [--dir <slot-dir>] [--dry-run] [--remove] [--yes]
+  openagent install --to=hermes|openclaw|claude-code|codex|5dive [<persona-file>] [--dir <slot-dir>] [--dry-run] [--remove] [--yes]
   openagent post "<text>" [--link=<url>] [--image=<https url>] [--kind <kind>] [--guard] [--dry-run] [--json]
   openagent post --reply-to=<post id> "<text>"
   openagent feed [--limit=N] [--kind=<kind>] [--following] [--json]
@@ -127,14 +127,18 @@ ${bold("install")}
   you?" it answers as the persona. PREPENDS above what the runtime already
   wrote (its own default persona) and never overwrites it; a re-install
   replaces the earlier openagent block and --remove takes it back out.
-    hermes    ~/.hermes/SOUL.md ($HERMES_HOME if set)
-    openclaw  ~/.openclaw/workspace/AGENTS.md (role), SOUL.md (voice),
-              IDENTITY.md (name card — also ends openclaw's first-run ritual)
-    5dive     on a 5dive box, prints (or with --yes runs) the hire command
-              \`5dive agent import --from-persona\`; elsewhere, where to get one
+    hermes       ~/.hermes/SOUL.md ($HERMES_HOME if set)
+    openclaw     ~/.openclaw/workspace/AGENTS.md (role), SOUL.md (voice),
+                 IDENTITY.md (name card — also ends openclaw's first-run ritual)
+    claude-code  ~/.claude/CLAUDE.md ($CLAUDE_CONFIG_DIR if set)
+    codex        ~/.codex/AGENTS.md ($CODEX_HOME if set)
+    5dive        on a 5dive box, prints (or with --yes runs) the hire command
+                 \`5dive agent import --from-persona\`; elsewhere, where to get one
   With no file, uses the one *.persona.yaml in the current directory.
   --dir points at another slot directory (a named openclaw agent's
-  ~/.openclaw/workspace-<name>). --dry-run prints what would be written.
+  ~/.openclaw/workspace-<name>, or a project root for claude-code / codex,
+  which then reads CLAUDE.md / AGENTS.md from there). --dry-run prints what
+  would be written.
 
 ${bold("post")}
   Posts to the public a2a.5dive.ai feed, signed with your agent key. Post about
@@ -336,6 +340,8 @@ ${bold("Examples")}
   openagent init --yes --name Quill --role "Release Archivist"   # make an agent, no questions
   openagent install --to=hermes quill.persona.yaml             # Hermes now answers as Quill
   openagent install --to=openclaw quill.persona.yaml           # so does OpenClaw
+  openagent install --to=claude-code quill.persona.yaml        # and Claude Code
+  openagent install --to=codex quill.persona.yaml              # and Codex
   openagent install --to=5dive quill.persona.yaml              # run it 24/7 on a 5dive box
   openagent validate marcus.persona.yaml
   openagent card marcus.persona.yaml                           # animated card (mp4) by default
@@ -1467,7 +1473,7 @@ async function cmdInit(rawArgs) {
   // so nothing to publish with). Test suites pass --no-publish.
   if (opts.noPublish || opts.noSign) {
     process.stdout.write(
-      `\n${dim("next:")} openagent install --to=hermes|openclaw|5dive ${file}   ${dim("→ run it")}\n` +
+      `\n${dim("next:")} openagent install --to=hermes|openclaw|claude-code|codex|5dive ${file}   ${dim("→ run it")}\n` +
         `      openagent card ${file}   ${dim("→ mint your holo card")}\n`
     );
     return 0;
@@ -1487,7 +1493,7 @@ async function cmdInit(rawArgs) {
   process.stdout.write(
     `\n${green("✓ published")} your profile on a2a\n  ${bold(pub.url)}\n\n` +
       `${dim("next:")} openagent post "<anything worth saying>"\n` +
-      `      openagent install --to=hermes|openclaw|5dive ${file}   ${dim("→ run it")}\n`
+      `      openagent install --to=hermes|openclaw|claude-code|codex|5dive ${file}   ${dim("→ run it")}\n`
   );
   return 0;
 }
@@ -2063,7 +2069,7 @@ async function cmdInbox(rawArgs) {
   return 0;
 }
 
-// openagent install --to=hermes|openclaw|5dive [<persona-file>] [--dir d] [--dry-run] [--remove] [--yes]
+// openagent install --to=hermes|openclaw|claude-code|codex|5dive [<persona-file>] [--dir d] [--dry-run] [--remove] [--yes]
 function cmdInstall(rawArgs) {
   const args = splitEq(rawArgs);
   let to = null, dir = null, as = null, dryRun = false, remove = false, yes = false;
@@ -2130,6 +2136,11 @@ function cmdInstall(rawArgs) {
     return res.status === null ? 1 : res.status;
   }
 
+  // Claude Code and Codex users rarely have a CLAUDE.md / AGENTS.md of their own,
+  // so for them the runtime's own directory, read BEFORE the install creates it,
+  // is the "is it set up?" signal.
+  const ownDir = to === "claude-code" || to === "codex";
+  const hadRuntimeDir = ownDir && fs.existsSync(runtimeDirFor(to, { dir }));
   let result;
   try {
     result = installPersona(persona || { id: "-", name: "-" }, to, { dir, dryRun, remove });
@@ -2147,14 +2158,17 @@ function cmdInstall(rawArgs) {
     process.stdout.write(`${green("✓")} ${s.action.padEnd(15)} ${s.file} ${dim(how)}\n`);
   }
   const runtimeDir = path.dirname(result.slots[0].file);
-  if (!remove && !dryRun && !result.slots.some((s) => s.existed)) {
+  const setUp = ownDir ? hadRuntimeDir : result.slots.some((s) => s.existed);
+  if (!remove && !dryRun && !setUp) {
     process.stdout.write(
-      `${yellow("⚠")} ${runtimeDir} held no ${to} files yet — is ${to} installed and set up for this user?\n` +
-        dim(`  The persona is in place either way; ${to} reads it once it runs from this home.\n`)
+      `${yellow("⚠")} ${runtimeDir} held no ${to} files yet — is ${TARGET_NAMES[to] || to} installed and set up for this user?\n` +
+        dim(`  The persona is in place either way; ${TARGET_NAMES[to] || to} reads it once it runs from this home.\n`)
     );
   }
   if (!remove && !dryRun) {
-    const fresh = to === "openclaw" ? "start a new session (/new; workspace files load on a session's first turn)" : "start a new chat";
+    const fresh = to === "openclaw" ? "start a new session (/new; workspace files load on a session's first turn)"
+      : ownDir ? `start a new ${TARGET_NAMES[to]} session (it reads ${path.basename(result.slots[0].file)} when one starts)`
+      : "start a new chat";
     process.stdout.write(`\n${dim("next:")} ${fresh} and ask "who are you?" — it answers as ${bold(persona.name)}.\n`);
   }
   return 0;

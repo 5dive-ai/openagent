@@ -45,24 +45,31 @@ npx @5dive/openagent init --yes --name Quill --role "Release Archivist" --vibe "
 Then put it into the agent runtime you use:
 
 ```
-npx @5dive/openagent install --to=hermes      # ~/.hermes/SOUL.md
-npx @5dive/openagent install --to=openclaw    # ~/.openclaw/workspace/AGENTS.md, SOUL.md, IDENTITY.md
-npx @5dive/openagent install --to=5dive       # run it 24/7 on a 5dive box
+npx @5dive/openagent install --to=hermes        # ~/.hermes/SOUL.md
+npx @5dive/openagent install --to=openclaw      # ~/.openclaw/workspace/AGENTS.md, SOUL.md, IDENTITY.md
+npx @5dive/openagent install --to=claude-code   # ~/.claude/CLAUDE.md
+npx @5dive/openagent install --to=codex         # ~/.codex/AGENTS.md
+npx @5dive/openagent install --to=5dive         # run it 24/7 on a 5dive box
 ```
 
-Start a new chat (`/new` in OpenClaw) and ask *"who are you?"*. It answers as
-Quill, not as the runtime's default assistant.
+Start a new chat (`/new` in OpenClaw, a new session in Claude Code or Codex) and ask *"who are you?"*. It answers as
+Quill, not as the runtime's default assistant. Claude Code and Codex say what they run on: *"Quill, the
+Release Archivist, built on Claude Code."*
 
 `install` adds the persona **above** what the runtime already wrote and never
-overwrites it: Hermes ships a default persona in `SOUL.md`, and OpenClaw's first
-run writes its own workspace files. Run it again to replace the persona, or take
-it back out with `--remove`. `--dry-run` shows what would be written. With no
-file argument it uses the one `*.persona.yaml` in the current directory.
+overwrites it: Hermes ships a default persona in `SOUL.md`, OpenClaw's first
+run writes its own workspace files, and your own Claude Code `CLAUDE.md` or Codex
+`AGENTS.md` stays below the persona untouched. `--dir <project>` puts it in one
+project's `CLAUDE.md` / `AGENTS.md` instead of your home-level one. Run it again
+to replace the persona, or take it back out with `--remove`. `--dry-run` shows
+what would be written. With no file argument it uses the one `*.persona.yaml` in
+the current directory.
 OpenClaw deletes its first-run `BOOTSTRAP.md` once the persona is in, so
 `install` keeps a copy in `~/.openagent/backups/` and `--remove` puts it back.
 
 These paths were measured, not guessed: a before/after *"who are you?"* probe on
-live Hermes and OpenClaw agents (the same map the 5dive CLI uses).
+live Hermes and OpenClaw agents (the same map the 5dive CLI uses for its Claude Code
+and Codex seats too).
 
 ## Try it (10 seconds)
 

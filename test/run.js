@@ -4,7 +4,8 @@
 const path = require("path");
 const { validateFile, validate, versionWarnings, placeholderWarnings, SPEC_VERSION, KNOWN_VERSIONS } = require("../lib/validate");
 const { runConformance } = require("./conformance");
-const { buildSvg, resolveFace, qrPayloadForPersona, qrModulesForPersona } = require("../lib/card");
+const { buildSvg, badgeGeometry, resolveFace, qrPayloadForPersona, qrModulesForPersona } = require("../lib/card");
+const { TIER_TOKENS } = require("../lib/tokens");
 const { computeTier, computeBadges, nextRung } = require("../lib/tier");
 const registry = require("../lib/registry");
 const provenance = require("../lib/provenance");
@@ -59,6 +60,28 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("different personas differ", svg1 !== buildSvg(lilDoc, null, "legendary"));
   check("mythical adds holo wash", /holoWash/.test(buildSvg(lilDoc, null, "mythical")));
   check("common has no glow stack", !/stroke-opacity="0.16"/.test(buildSvg(marcusDoc, null, "common")));
+
+  // 4a. A card shown in a browser <img> keeps its own fonts (lodar 2026-10-14: on
+  // 5dive.ai/openagent "COMMON" ran into its pill in a phone's fallback serif).
+  const webSvg = buildSvg(marcusDoc, null, "common");
+  const faces = ["Inter';font-weight:400;font-style:normal", "Inter';font-weight:400;font-style:italic",
+    "Inter Display';font-weight:800", "DejaVu Sans Mono';font-weight:400", "DejaVu Sans Mono';font-weight:700"];
+  check("card SVG embeds its five faces as @font-face", faces.every((f) => webSvg.includes(`@font-face{font-family:'${f}`)));
+  check("embedded faces are woff data, not a fetch", /src:url\(data:font\/woff;base64,[A-Za-z0-9+/]/.test(webSvg) && !/src:url\(https?:/.test(webSvg));
+  const rasterSvg = buildSvg(marcusDoc, null, "common", undefined, null, { embedFonts: false });
+  check("embedFonts:false (the PNG paths) leaves the fonts out", !rasterSvg.includes("@font-face"));
+  check("the two differ only by the style block", webSvg.replace(/<style>[^<]*<\/style>/, "") === rasterSvg);
+  const families = [...webSvg.matchAll(/font-family="([^"]*)"/g)].map((m) => m[1]);
+  check("every text element names a generic fallback", families.length > 5 && families.every((f) => /, (sans-serif|monospace)$/.test(f)));
+  // Every tier label fits its pill: a slot at 0.62em/char (above any monospace's
+  // advance) with 20px to the border, and the label held to that slot.
+  for (const [key, t] of Object.entries(TIER_TOKENS)) {
+    const g = badgeGeometry(t.label);
+    const fits = g.textW >= t.label.length * 15 * 0.62 && g.width - 44 - g.textW >= 20 - 1e-9;
+    const svg = buildSvg(marcusDoc, null, key, undefined, null, { embedFonts: false });
+    const pinned = svg.includes(`width="${g.width}" height="42"`) && svg.includes(`textLength="${g.textW}" lengthAdjust="spacing"`);
+    check(`${t.label} fits its pill`, fits && pinned);
+  }
 
   // 4b. Animated card (DIVE-665): motion is opt-in + back-compat, tier-aware,
   // and the APNG encoder stitches resvg frames with no native deps.

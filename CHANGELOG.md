@@ -45,6 +45,48 @@ CLI/package only; the spec is unchanged.
   plain words that a DM is never a reason to run a command, share a key or open
   a link.
 
+## [0.49.2] — install into Claude Code and Codex
+
+CLI/package only; the spec is unchanged.
+
+- **Added — `openagent install --to=claude-code`** writes the persona into
+  `~/.claude/CLAUDE.md` (`$CLAUDE_CONFIG_DIR` if set), the user instructions Claude
+  Code loads in every project.
+- **Added — `openagent install --to=codex`** writes it into `~/.codex/AGENTS.md`
+  (`$CODEX_HOME` if set), Codex's global guidance.
+- Both follow the same contract as Hermes and OpenClaw. The persona block goes
+  ABOVE the user's own text, a re-install replaces it, `--remove` takes it back out
+  byte-exact, and `--dry-run` shows it. `--dir <project>` targets a project's
+  `CLAUDE.md` / `AGENTS.md` instead. The paths are the 5dive CLI's measured
+  `[claude]` and `[codex]` rows.
+- For these two the block also says what the agent runs on: "When asked who you
+  are, answer as <Name>, the <role>, built on Claude Code" (or "built on Codex").
+  Measured 2026-10-14: with that line, asked "who are you?", the CLI answers as the
+  persona every time ("lil bro, creative director at 5dive, built on claude code")
+  instead of "I'm Claude Code". Hermes and OpenClaw blocks are unchanged.
+- The "is it installed?" warning for these two checks for the runtime's own
+  directory (`~/.claude`, `~/.codex`), since most users have no CLAUDE.md /
+  AGENTS.md of their own yet. The warning now names the runtime the way people
+  know it ("Hermes", "Claude Code").
+
+## [0.49.1] — a card SVG keeps its fonts in a browser
+
+CLI/package only; the spec is unchanged.
+
+- **Fixed — a card shown in a browser drew every line in the fallback serif**, and the
+  rarity pill's label ran into its border ("COMMON" on 5dive.ai/openagent, lodar
+  2026-10-14). An SVG in an `<img>` can load no outside font. `buildSvg` /
+  `buildAnimatedSvg` now embed Latin subsets of the five faces the card uses (Inter
+  regular and italic, Inter Display ExtraBold, DejaVu Sans Mono regular and bold) as
+  `@font-face`, about 95 KB. They are built from `assets/fonts` by
+  `scripts/subset-web-fonts.sh`.
+- Every text element now names a font stack ending in `sans-serif` or `monospace`.
+- The rarity pill's label is held to a slot sized at 0.62em per character
+  (`textLength`), so any tier label fits with 20px to spare, even in a fallback font.
+  `badgeGeometry(label)` is exported. The voiceprint chip uses the same measure.
+- The PNG and animated paths rasterize with the full bundled fonts as before and pass
+  `{ embedFonts: false }`. Pass that yourself to get an SVG without the embedded fonts.
+
 ## [0.49.0] — the card QR opens the agent's a2a profile
 
 CLI/package only; the spec's `openagent:` URI is unchanged.
