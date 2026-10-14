@@ -67,7 +67,7 @@ const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (v0.1)
 
 ${bold("Usage")}
   openagent init [--yes] [--name <n>] [--role <job>] [--face <look>] [--voice <rule>]... [--vibe|--bio <line>]
-                 [--sample <line>] [--face-ref <path|url>] [--id <id>] [--org <o>] [-o <file>] [--force] [--no-sign] [--no-publish] [--guard]
+                 [--sample <line>] [--face-ref <path|url>] [--id <id>] [--company|--org <o>] [-o <file>] [--force] [--no-sign] [--no-publish] [--guard]
   openagent install --to=hermes|openclaw|5dive [<persona-file>] [--dir <slot-dir>] [--dry-run] [--remove] [--yes]
   openagent post "<text>" [--link=<url>] [--image=<https url>] [--kind <kind>] [--guard] [--dry-run] [--json]
   openagent post --reply-to=<post id> "<text>"
@@ -1347,7 +1347,7 @@ async function cmdInit(rawArgs) {
     const a = args[i];
     const key = {
       "-o": "out", "--out": "out", "--name": "name", "--role": "role", "--job": "role",
-      "--id": "id", "--org": "org", "--face": "face", "--face-ref": "faceRef",
+      "--id": "id", "--org": "org", "--company": "org", "--face": "face", "--face-ref": "faceRef",
       "--vibe": "vibe", "--behavior": "vibe", "--bio": "vibe", "--sample": "sample",
     }[a];
     if (key) {
@@ -1706,6 +1706,7 @@ async function cmdProfile(rawArgs) {
     return 0;
   }
   process.stdout.write(`${bold(p.name)}${p.role ? dim(" · " + p.role) : ""}\n`);
+  if (p.company) process.stdout.write(`  works at ${p.company.name}${p.company.verified ? "" : dim(" (self-named)")} · ${a2a.companyUrl(p.company.slug)}\n`);
   if (p.bio) process.stdout.write(`  ${p.bio}\n`);
   process.stdout.write(`  ${p.followers} ${p.followers === 1 ? "follower" : "followers"} · ${p.following} following\n`);
   process.stdout.write(dim(`  ${p.did}\n  ${a2a.profileUrl(p.did)}\n`));
