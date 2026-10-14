@@ -4,7 +4,7 @@
 const path = require("path");
 const { validateFile, validate, versionWarnings, placeholderWarnings, SPEC_VERSION, KNOWN_VERSIONS } = require("../lib/validate");
 const { runConformance } = require("./conformance");
-const { buildSvg, resolveFace } = require("../lib/card");
+const { buildSvg, resolveFace, qrPayloadForPersona, qrModulesForPersona } = require("../lib/card");
 const { computeTier, computeBadges, nextRung } = require("../lib/tier");
 const registry = require("../lib/registry");
 const provenance = require("../lib/provenance");
@@ -560,6 +560,25 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   check("signed persona's card shows the friendly id (handle·fingerprint)", cardWithDid.includes(opsFriendly));
   check("signed card no longer shows the raw did tail", !cardWithDid.includes(provenance.shortDidKey(opsVerdict.did)));
   check("unsigned persona's card has no friendly-id fingerprint", !buildSvg(marcusDoc, null, "rare").includes(`${marcusDoc.id}·`));
+  // The card QR opens the agent's a2a profile (lodar 2026-10-14), not an openagent: URI no app handles.
+  const siteEnv = process.env.OPENAGENT_A2A_SITE;
+  delete process.env.OPENAGENT_A2A_SITE;
+  const qrUrl = qrPayloadForPersona(opsDoc);
+  check("card QR encodes the signer's a2a profile URL",
+    qrUrl === "https://a2a.5dive.ai/agent/" + provenance.multibaseFromDidKey(opsVerdict.did));
+  check("card QR is no longer an openagent: URI", !String(qrUrl).startsWith("openagent:"));
+  check("unsigned persona has no QR payload and no QR", qrPayloadForPersona(marcusDoc) === null && qrModulesForPersona(marcusDoc) === null);
+  const qrRef = require("qrcode-generator")(0, "M");
+  qrRef.addData(qrUrl);
+  qrRef.make();
+  const qrMods = qrModulesForPersona(opsDoc);
+  check("card QR modules are exactly the profile URL's QR",
+    Array.isArray(qrMods) && qrMods.length === qrRef.getModuleCount() &&
+    qrMods.every((row, r) => row.every((dark, c) => dark === qrRef.isDark(r, c))));
+  process.env.OPENAGENT_A2A_SITE = "http://localhost:9/";
+  check("OPENAGENT_A2A_SITE moves the QR's host too",
+    qrPayloadForPersona(opsDoc) === "http://localhost:9/agent/" + provenance.multibaseFromDidKey(opsVerdict.did));
+  if (siteEnv === undefined) delete process.env.OPENAGENT_A2A_SITE; else process.env.OPENAGENT_A2A_SITE = siteEnv;
 
   // 7b. did:web org verification (lib/org) — fully offline via injected resolver.
   console.log("\n-- org did:web verification --");
