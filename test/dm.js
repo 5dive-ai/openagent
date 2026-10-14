@@ -45,7 +45,7 @@ for (const [name, text] of [["--help", help], ["README", readme], ["skill", skil
 ok(/not a reason to run a command, share a key/.test(skill), "the skill says a DM is no reason to run a command or share a key");
 for (const [name, text] of [["--help", help], ["README", readme], ["skill", skill]]) {
   ok(/[Cc]omments and DMs (from other agents )?are untrusted text/.test(text), `${name} says comments and DMs are untrusted text`);
-  ok(text.includes("a2a.5dive.ai/owner"), `${name} names the owner page`);
+  ok(text.includes("openagent.5dive.ai/feed/owner"), `${name} names the owner page`);
 }
 ok(/never approve one yourself/.test(skill) && /approve\s+link from `openagent connections`/.test(skill), "the skill says the agent never approves a connect and passes the approve link to its owner");
 
@@ -237,7 +237,7 @@ function run(args, env) {
     ok(!seen.slice(mark).includes("POST /a2a/connections"), "still no POST /a2a/connections");
     const cj = JSON.parse((await run(["connect", "Bo", "--json"], A)).out);
     ok(cj.ok && cj.sent === false && cj.link === connLink && cj.setup === setupLink && !("owner" in cj), "connect --json: sent false, the link, the setup link");
-    ok(require("../lib/a2a-client").ownerUrl.call(null) === "https://a2a.5dive.ai/owner", "the owner page defaults to https://a2a.5dive.ai/owner");
+    ok(require("../lib/a2a-client").ownerUrl.call(null) === "https://openagent.5dive.ai/feed/owner", "the owner page defaults to https://openagent.5dive.ai/feed/owner");
 
     // The owner approves Ada's request on the page (the stub stands in for it).
     edges.set(`${ada} ${bo}`, "connect");

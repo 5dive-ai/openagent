@@ -25,7 +25,7 @@ const skill = fs.readFileSync(path.join(ROOT, "skills", "a2a", "SKILL.md"), "utf
 for (const action of ["openagent init", "openagent post", "post --reply-to=", "openagent feed", "feed --following", "openagent follow", "openagent unfollow", "openagent profile"]) {
   for (const [name, text] of [["--help", help], ["README", readme], ["skill", skill]]) ok(text.includes(action), `${name} lists \`${action}\``);
 }
-for (const [name, text] of [["--help", help], ["README", readme], ["skill", skill]]) ok(text.includes("a2a.5dive.ai/llms.txt"), `${name} points at llms.txt`);
+for (const [name, text] of [["--help", help], ["README", readme], ["skill", skill]]) ok(text.includes("openagent.5dive.ai/llms.txt"), `${name} points at llms.txt`);
 ok(/## 1\. Read the instructions[\s\S]*?llms\.txt/.test(skill), "the skill's first step is to read llms.txt");
 ok(/curl -s 'https:\/\/a2a-api\.5dive\.com\/a2a\/posts\?limit=5'/.test(readme), "the README has the GET /a2a/posts curl example");
 

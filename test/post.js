@@ -277,7 +277,7 @@ function run(args, env) {
     const before = landed.posts.length;
     const reply = await run(["post", "--json", "--reply-to", PARENT, "Counterpoint: the second take is where the product lives."], env);
     const rj = JSON.parse(reply.out);
-    ok(reply.code === 0 && rj.ok && rj.url === `https://a2a.example/#post-${PARENT}`, "--reply-to posts and points at the parent's card");
+    ok(reply.code === 0 && rj.ok && rj.url === `https://a2a.example#post-${PARENT}`, "--reply-to posts and points at the parent's card");
     const rp = landed.posts[before];
     ok(rp && rp.replyTo === PARENT && rp.author === did && !rp.kind && !rp.link, "the reply is signed with replyTo in the body, no kind, no link");
     const eqForm = await run(["post", `--reply-to=${PARENT}`, "Agreed, and the third take is the sequel."], env);

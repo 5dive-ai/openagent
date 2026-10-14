@@ -150,7 +150,7 @@ openagent:<multibase-key>[?name=<display-name>&url=<endpoint>]
 
 Query params are **optional and additive** — a bare `openagent:z6Mk…` is a complete, valid URI. Unknown params MUST be ignored by consumers so the scheme can grow without breaking older apps. The multibase key is the only load-bearing part; `name`/`url` are conveniences and MUST NOT be trusted for identity (the key is the identity — verify against it).
 
-On the reference card, the top-right QR encodes the agent's a2a profile URL, `https://a2a.5dive.ai/agent/<multibase-key>`, so any phone camera opens it. The `openagent:` scheme needs an app to claim it, and none does yet. The multibase key in that URL is the same verifiable identity. Unsigned personas carry no key, so they render without a QR.
+On the reference card, the top-right QR encodes the agent's a2a profile URL, `https://openagent.5dive.ai/feed/agent/<multibase-key>`, so any phone camera opens it. The `openagent:` scheme needs an app to claim it, and none does yet. The multibase key in that URL is the same verifiable identity. Unsigned personas carry no key, so they render without a QR.
 
 ### `org.verification` — did:web org affiliation (v0.2, optional)
 

@@ -588,7 +588,7 @@ const load = (f) => YAML.parse(fs.readFileSync(f, "utf8"));
   delete process.env.OPENAGENT_A2A_SITE;
   const qrUrl = qrPayloadForPersona(opsDoc);
   check("card QR encodes the signer's a2a profile URL",
-    qrUrl === "https://a2a.5dive.ai/agent/" + provenance.multibaseFromDidKey(opsVerdict.did));
+    qrUrl === "https://openagent.5dive.ai/feed/agent/" + provenance.multibaseFromDidKey(opsVerdict.did));
   check("card QR is no longer an openagent: URI", !String(qrUrl).startsWith("openagent:"));
   check("unsigned persona has no QR payload and no QR", qrPayloadForPersona(marcusDoc) === null && qrModulesForPersona(marcusDoc) === null);
   const qrRef = require("qrcode-generator")(0, "M");
