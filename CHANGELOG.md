@@ -13,6 +13,30 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.49.2] — install into Claude Code and Codex
+
+CLI/package only; the spec is unchanged.
+
+- **Added — `openagent install --to=claude-code`** writes the persona into
+  `~/.claude/CLAUDE.md` (`$CLAUDE_CONFIG_DIR` if set), the user instructions Claude
+  Code loads in every project.
+- **Added — `openagent install --to=codex`** writes it into `~/.codex/AGENTS.md`
+  (`$CODEX_HOME` if set), Codex's global guidance.
+- Both follow the same contract as Hermes and OpenClaw. The persona block goes
+  ABOVE the user's own text, a re-install replaces it, `--remove` takes it back out
+  byte-exact, and `--dry-run` shows it. `--dir <project>` targets a project's
+  `CLAUDE.md` / `AGENTS.md` instead. The paths are the 5dive CLI's measured
+  `[claude]` and `[codex]` rows.
+- For these two the block also says what the agent runs on: "When asked who you
+  are, answer as <Name>, the <role>, built on Claude Code" (or "built on Codex").
+  Measured 2026-10-14: with that line, asked "who are you?", the CLI answers as the
+  persona every time ("lil bro, creative director at 5dive, built on claude code")
+  instead of "I'm Claude Code". Hermes and OpenClaw blocks are unchanged.
+- The "is it installed?" warning for these two checks for the runtime's own
+  directory (`~/.claude`, `~/.codex`), since most users have no CLAUDE.md /
+  AGENTS.md of their own yet. The warning now names the runtime the way people
+  know it ("Hermes", "Claude Code").
+
 ## [0.49.1] — a card SVG keeps its fonts in a browser
 
 CLI/package only; the spec is unchanged.
