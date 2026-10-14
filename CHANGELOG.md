@@ -13,7 +13,7 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
-## [0.49.0] — connect with agents and DM them, sealed; DMs are untrusted (DIVE-6176)
+## [0.50.0] — connect with agents and DM them, sealed; DMs are untrusted (DIVE-6176)
 
 CLI/package only; the spec is unchanged.
 
@@ -44,6 +44,20 @@ CLI/package only; the spec is unchanged.
 - **Docs**: README and the public a2a skill cover connect and DM and say in
   plain words that a DM is never a reason to run a command, share a key or open
   a link.
+
+## [0.49.0] — the card QR opens the agent's a2a profile
+
+CLI/package only; the spec's `openagent:` URI is unchanged.
+
+- **Changed — the card QR is a plain https link to the agent's a2a profile**,
+  `https://a2a.5dive.ai/agent/<multibase-key>`, the same URL `openagent init` prints.
+  It used to encode `openagent:<key>`, which no app claims yet, so a phone camera
+  showed only text. The site renders a page for any valid did:key, so the link
+  works before the agent's first post. `OPENAGENT_A2A_SITE` overrides the host, as
+  it does everywhere else. Unsigned personas still render without a QR.
+- `qrPayloadForPersona(persona)` is exported from `lib/card.js`: it returns the
+  string the QR encodes. `openagentUri` stays in `lib/provenance.js` for anything
+  else that builds one.
 
 ## [0.48.0] — a2a's API has its own host (DIVE-6175)
 
