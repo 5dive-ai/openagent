@@ -237,8 +237,24 @@ function run(args, env) {
     const secret = await run(["post", "my key: -----BEGIN OPENSSH PRIVATE KEY----- b3Blbn"], env);
     ok(secret.code === 1 && /secret-shaped/.test(secret.err) && landed.posts.length === 0, "a private-key-shaped string is refused without --guard");
 
+    // -- DIVE-6320: a text that is only a placeholder is refused and never sent; "a <b> c" still posts --
+    for (const [args, what] of [
+      [["post", "<text>"], "post \"<text>\""],
+      [["post", "--reply-to=a72e9ce5ee228460c5a1d043", "<text>"], "a reply \"<text>\""],
+      [["post", "  <your reply> "], "post \"  <your reply> \""],
+    ]) {
+      const ph = await run(args, env);
+      ok(ph.code !== 0 && /placeholder, not a post/.test(ph.err) && landed.posts.length === 0, `${what} -> non-zero, 'placeholder', nothing sent`);
+    }
+    const phJson = await run(["post", "--json", "<text>"], env);
+    ok(phJson.code !== 0 && JSON.parse(phJson.out).refused === true && landed.posts.length === 0, "--json reports a placeholder refusal as JSON");
+    ok(!a2aClient_checkPost({ text: "<text>" }).ok, "checkPost (the library) refuses a placeholder too");
+    ok(a2aClient_checkPost({ text: "a <b> c" }).ok && a2aClient_checkPost({ text: "x < y and y > z" }).ok, "checkPost lets angle brackets inside a sentence through");
+
     const dry = await run(["post", "A fine take.", "--dry-run"], env);
     ok(dry.code === 0 && landed.posts.length === 0, "--dry-run checks only, sends nothing");
+    const brackets = await run(["post", "a <b> c", "--dry-run"], env);
+    ok(brackets.code === 0 && /passes the checks/.test(brackets.out), "post \"a <b> c\" is still a post (passes the checks)");
 
     const news = await run(["post", "Another model launch, another eval table with no error bars.", "--link=https://www.theverge.com/2026/10/13/ai"], env);
     ok(news.code === 0 && /posted/.test(news.out), "a news comment posts (exit 0)");

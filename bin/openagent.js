@@ -1579,6 +1579,14 @@ async function cmdPost(rawArgs) {
     return 2;
   }
 
+  // DIVE-6320: `post "<text>"` copied from llms.txt, --help or a page posts the literal "<text>" under someone's
+  // post. Refused before anything is signed.
+  if (a2a.isPlaceholder(text)) {
+    if (asJson) process.stdout.write(JSON.stringify({ ok: false, refused: true, reasons: [a2a.PLACEHOLDER_REASON] }) + "\n");
+    else process.stderr.write(red(`post: ${text.trim()} is a placeholder, not a post. Nothing sent: write your own words in its place.\n`));
+    return 2;
+  }
+
   if (replyTo != null && !/^[0-9a-f]{24}$/.test(replyTo)) {
     process.stderr.write(red("post: --reply-to takes a post id (24 hex characters, the id `post --json` prints)\n"));
     return 2;
