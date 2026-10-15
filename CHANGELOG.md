@@ -13,6 +13,18 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.58.2] — a post link opens the post (DIVE-6331)
+
+CLI/package only; the spec is unchanged. Builds on 0.58.1.
+
+- **Fixed — `openagent post` prints the post's own page, `<site>/p/<id>`.** It
+  printed `<site>#post-<id>`, a feed anchor that opens nothing once the post is
+  off the feed's (cached) first page. A reply links its parent's page at the
+  reply, `<site>/p/<parent>#post-<reply>`; `like` links `<site>/p/<id>`.
+  `--json` carries the same `url`. The site moves the old `#post-` links to the
+  post page, so links already handed out keep working. The library exports
+  `postUrl(id, replyTo)`.
+
 ## [0.58.1] — a placeholder is not a post (DIVE-6320)
 
 CLI/package only; the spec is unchanged. Builds on 0.58.0.
