@@ -71,6 +71,14 @@ function route(base, req, res) {
     res.on("error", () => {});
     return pump();
   }
+  if (p === "/drip.persona.yaml") {
+    // One byte a second, forever: never idle, so only a whole-download limit stops it.
+    res.writeHead(200, { "content-type": "application/yaml" });
+    const iv = setInterval(() => res.write("#"), 1000);
+    res.on("close", () => clearInterval(iv));
+    res.on("error", () => {});
+    return res.write("#");
+  }
   if (p === "/hop") return res.writeHead(302, { location: "/pack-files/quill.persona.yaml" }), res.end();
   if (p === "/to-http") return res.writeHead(301, { location: `http://127.0.0.1:${base.port}/pack-files/quill.persona.yaml` }), res.end();
   if (p.startsWith("/loop/")) {
@@ -80,12 +88,12 @@ function route(base, req, res) {
   res.writeHead(404), res.end("not found");
 }
 
-function run(args, { home, tmpdir, certFile }) {
+function run(args, { home, tmpdir, certFile, extraEnv = {} }) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [CLI, ...args], {
       cwd: home,
       env: { ...process.env, HOME: home, TMPDIR: tmpdir, CODEX_HOME: "", CLAUDE_CONFIG_DIR: "", HERMES_HOME: "", OPENAGENT_HOME: "", NO_COLOR: "1",
-        OPENAGENT_A2A_API: "http://127.0.0.1:9", NODE_EXTRA_CA_CERTS: certFile },
+        OPENAGENT_A2A_API: "http://127.0.0.1:9", NODE_EXTRA_CA_CERTS: certFile, ...extraEnv },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let out = "";
@@ -178,6 +186,23 @@ function tree(dir) {
     });
   }
 
+  await t("a server that trickles a byte a second is cut off at the whole-download limit and writes nothing", async () => {
+    // Limit lowered to 3 s for speed; the arm still spans several drip ticks, so an
+    // idle-only timer (req.setTimeout) would never fire and this would hang to the watchdog.
+    const e = { ...env(), extraEnv: { OPENAGENT_FETCH_TIMEOUT_MS: "3000" } };
+    const t0 = Date.now();
+    const r = await Promise.race([
+      run(["install", "--to=codex", url("/drip.persona.yaml")], e),
+      new Promise((res) => setTimeout(() => res({ code: "hung", out: "still running after 10s" }), 10000)),
+    ]);
+    const took = Date.now() - t0;
+    assert.strictEqual(r.code, 1, r.out);
+    assert.match(r.out, /timed out after 3s/);
+    assert.ok(took >= 2500 && took < 8000, `took ${took} ms`);
+    assert.deepStrictEqual(tree(e.home), [], "home must stay empty");
+    assert.deepStrictEqual(tree(e.tmpdir), [], "no download left behind");
+  });
+
   await t("negative control: the same invalid persona as a local file refuses too (the link adds no new check, and skips none)", async () => {
     const e = env();
     const f = path.join(e.tmpdir, "broken.persona.yaml");
@@ -202,6 +227,7 @@ function tree(dir) {
     assert.strictEqual(r.code, 2, r.out);
   });
 
+  server.closeAllConnections?.();
   server.close();
   console.log(`\n${pass} passed, ${fail.length} failed`);
   if (fail.length) {

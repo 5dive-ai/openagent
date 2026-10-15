@@ -22,7 +22,8 @@ CLI/package only; the spec is unchanged. Builds on 0.58.1.
   `https://openagent.5dive.ai/pack-files/<id>.persona.yaml`, so installing
   someone's agent is one command with no download step. The CLI fetches the
   file over https only, refuses a redirect to http, follows up to 3 redirects,
-  stops after 15 s and caps the body at 1 MB, enforced while it streams. The
+  gives up when the whole download takes over 15 s (a server that trickles
+  bytes counts too, not only one that goes silent) and caps the body at 1 MB, enforced while it streams. The
   file is then validated exactly like a local one before anything is written,
   and a link that fails any of these checks installs nothing. The copy kept in
   `~/.openagent` (for `export`) is the fetched file, and the temp download is
