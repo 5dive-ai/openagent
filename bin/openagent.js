@@ -12,6 +12,7 @@ const { flow } = require("../lib/flow");
 const { runInit } = require("../lib/init");
 const { TARGETS: INSTALL_TARGETS, TARGET_NAMES, runtimeDirFor, installPersona, fiveDivePlan, findOnPath } = require("../lib/install");
 const bundle = require("../lib/bundle");
+const { fetchPersona, isUrl } = require("../lib/fetch-persona");
 const { loadAgentKey, loadOrCreateAgentKey, agentKeyPath, agentPersonaPath, agentHome } = require("../lib/keystore");
 const guard = require("../lib/leak-guard");
 const YAML = require("yaml");
@@ -71,7 +72,7 @@ const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (spec v0.
 ${bold("Usage")}
   openagent init [--yes] [--name <n>] [--role <job>] [--face <look>] [--voice <rule>]... [--vibe|--bio <line>]
                  [--sample <line>] [--face-ref <path|url>] [--id <id>] [--company|--org <o>] [-o <file>] [--force] [--no-sign] [--no-publish] [--guard]
-  openagent install --to=hermes|openclaw|claude-code|codex|5dive [<persona-file>] [--dir <slot-dir>] [--dry-run] [--remove] [--yes]
+  openagent install --to=hermes|openclaw|claude-code|codex|5dive [<persona-file>|<https-url>] [--dir <slot-dir>] [--dry-run] [--remove] [--yes]
   openagent export --from=hermes|openclaw|claude-code|codex [--memory] [--no-skills] [--persona <file>] [--dir <dir>] [--project <path>] [-o agent.tar.gz] [--json]
   openagent import <agent.tar.gz> --to=hermes|openclaw|claude-code|codex|5dive [--dir <dir>] [--project <path>] [--overwrite] [--dry-run] [--json]
   openagent post "<text>" [--link=<url>] [--image=<https url>] [--kind <kind>] [--guard] [--dry-run] [--json]
@@ -139,7 +140,10 @@ ${bold("install")}
     codex        ~/.codex/AGENTS.md ($CODEX_HOME if set)
     5dive        on a 5dive box, prints (or with --yes runs) the hire command
                  \`5dive agent import --from-persona\`; elsewhere, where to get one
-  With no file, uses the one *.persona.yaml in the current directory.
+  With no file, uses the one *.persona.yaml in the current directory. The
+  file may be an https:// link (a pack page's persona URL): it is fetched
+  (https only, 1 MB cap, up to 3 redirects) and validated like a file, and a
+  link that fails either installs nothing.
   --dir points at another slot directory (a named openclaw agent's
   ~/.openclaw/workspace-<name>, or a project root for claude-code / codex,
   which then reads CLAUDE.md / AGENTS.md from there). --dry-run prints what
@@ -377,6 +381,7 @@ ${bold("Examples")}
   openagent install --to=openclaw <id>.persona.yaml            # so does OpenClaw
   openagent install --to=claude-code <id>.persona.yaml         # and Claude Code
   openagent install --to=codex <id>.persona.yaml               # and Codex
+  openagent install --to=codex https://openagent.5dive.ai/pack-files/dub.persona.yaml   # straight from a link
   openagent install --to=5dive <id>.persona.yaml               # run it 24/7 on a 5dive box
   openagent export --from=openclaw --memory -o <id>.tar.gz     # the whole agent in one file
   openagent import <id>.tar.gz --to=hermes                     # and into another harness
@@ -2168,8 +2173,21 @@ async function cmdInbox(rawArgs) {
   return 0;
 }
 
-// openagent install --to=hermes|openclaw|claude-code|codex|5dive [<persona-file>] [--dir d] [--dry-run] [--remove] [--yes]
-function cmdInstall(rawArgs) {
+// openagent install --to=hermes|openclaw|claude-code|codex|5dive [<persona-file>|<https-url>] [--dir d] [--dry-run] [--remove] [--yes]
+//
+// A link is downloaded to a temp file first (lib/fetch-persona.js) and then
+// installed exactly like a local file — same validation before any write, same
+// copy kept in ~/.openagent — and the temp file goes when install is done.
+async function cmdInstall(rawArgs) {
+  const fetched = {};
+  try {
+    return await installFrom(rawArgs, fetched);
+  } finally {
+    if (fetched.dir) fs.rmSync(fetched.dir, { recursive: true, force: true });
+  }
+}
+
+async function installFrom(rawArgs, fetched) {
   const args = splitEq(rawArgs);
   let to = null, dir = null, as = null, dryRun = false, remove = false, yes = false;
   const positional = [];
@@ -2204,11 +2222,27 @@ function cmdInstall(rawArgs) {
     file = found[0];
   }
 
+  // What the user typed, for messages: the link stays the link, not a temp path.
+  const shown = file;
+  if (file && isUrl(file)) {
+    if (remove) {
+      process.stderr.write(red("install: --remove takes no link — the block comes out by --to alone\n"));
+      return 2;
+    }
+    try {
+      Object.assign(fetched, await fetchPersona(file));
+    } catch (e) {
+      process.stderr.write(red(`install: ${e.message}\n`) + dim("  Nothing was installed.\n"));
+      return 1;
+    }
+    file = fetched.file;
+  }
+
   let persona = null;
   if (file) {
     const v = validateFile(file);
     if (!v.ok) {
-      process.stdout.write(`${red("✗")} ${file} is not a valid persona — fix it first:\n`);
+      process.stdout.write(`${red("✗")} ${shown} is not a valid persona${fetched.file ? " — nothing was installed" : " — fix it first"}:\n`);
       for (const err of v.errors) process.stdout.write(`        ${red("•")} ${err}\n`);
       return 1;
     }
@@ -2221,13 +2255,18 @@ function cmdInstall(rawArgs) {
       process.stdout.write(
         `${bold("Run " + persona.name + " 24/7 on 5dive")}\n` +
           `  1. Get a box: ${plan.signup}\n` +
-          `  2. On the box, with ${file} copied over:\n` +
-          `       npx @5dive/openagent install --to=5dive ${path.basename(file)}\n`
+          (fetched.file
+            ? `  2. On the box:\n       npx @5dive/openagent install --to=5dive ${shown}\n`
+            : `  2. On the box, with ${file} copied over:\n` +
+              `       npx @5dive/openagent install --to=5dive ${path.basename(file)}\n`)
       );
       return 0;
     }
     if (!yes || dryRun) {
-      process.stdout.write(`${bold("Hire " + persona.name + " on this box:")}\n  ${plan.command}\n${dim("  (or run: openagent install --to=5dive " + file + " --yes)")}\n`);
+      // A fetched file is gone once this exits, so the line to run names the link.
+      const cmd = fetched.file ? `openagent install --to=5dive ${shown} --yes` : plan.command;
+      const or = fetched.file ? "" : `\n${dim("  (or run: openagent install --to=5dive " + file + " --yes)")}`;
+      process.stdout.write(`${bold("Hire " + persona.name + " on this box:")}\n  ${cmd}${or}\n`);
       return 0;
     }
     const { spawnSync } = require("child_process");

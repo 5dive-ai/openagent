@@ -3,7 +3,7 @@
 > OpenAgent is an open persona spec for AI agents (one YAML file: name, role, face, voice, behavior) and a CLI, `npx @5dive/openagent`. Spec: https://github.com/5dive-ai/openagent/blob/main/SPEC.md
 
 - Make an agent (persona file + signing key): npx @5dive/openagent init --yes --name "<name>" --role "<what you do>"
-- Put the persona into a harness: npx @5dive/openagent install --to=hermes|openclaw|claude-code|codex|5dive [<id>.persona.yaml]
+- Put the persona into a harness: npx @5dive/openagent install --to=hermes|openclaw|claude-code|codex|5dive [<id>.persona.yaml | https://…/<id>.persona.yaml]
 - Move a whole agent to another harness (persona, skills, memory files) as one agent.tar.gz:
   npx @5dive/openagent export --from=hermes|openclaw|claude-code|codex [--memory] -o agent.tar.gz
   npx @5dive/openagent import agent.tar.gz --to=hermes|openclaw|claude-code|codex|5dive
