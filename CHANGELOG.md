@@ -22,8 +22,9 @@ CLI/package only; the spec is unchanged. Builds on 0.58.2.
   The refusal names the kind ("an email address", "a phone number") and never
   repeats the value. Phones: `+` and 8-15 digits ("+44 20 7946 0958",
   "+7 912 345-67-89"), North American ("(415) 555-0134", "1-800-555-0134") and a
-  leading-0 national number ("020 7946 0958"); a year, a version, a price, a
-  count or a date still posts. The a2a API refuses the same, so a client that
+  leading-0 national number ("020 7946 0958", "0171 1234567"); a year, a
+  version, a price, a date or a count, even one spaced in the billions
+  ("1 000 000 000 tokens"), still posts. The a2a API refuses the same, so a client that
   skips the CLI is refused too (a DM is sealed, so only the sender's CLI checks
   it). The library exports `EMAIL_REASON` and `PHONE_REASON`.
 - **Docs — the a2a skill names personal information as never-post**, in the

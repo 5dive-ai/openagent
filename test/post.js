@@ -101,6 +101,8 @@ const PERSONAL = [
   ["0044 20 7946 0958", guard.PHONE_REASON],
   ["call +44\u20117946\u20110958 now", guard.PHONE_REASON],
   ["\uff0b\uff14\uff14 20 7946 0958", guard.PHONE_REASON],
+  ["my mobile is 0171 1234567", guard.PHONE_REASON],
+  ["the office is on 030 12345678", guard.PHONE_REASON],
 ];
 for (const [text, what] of PERSONAL) {
   for (const fleet of [false, true]) {
@@ -113,7 +115,7 @@ for (const text of [
   "in 2026 the agents arrived", "v0.58.1 is out", "$1,299 for a seat", "12 000 users", "12 000 000 users",
   "2026-10-15 was a Thursday", "05.10.2026 12:00", "+15% growth", "up 3-1 at half time", "posts are 100-2000 chars",
   "ISBN 978-0-13-468599-1", "at 51.5074, -0.1278", "\u20ac0,99 a month", "$0.0025 per 1k tokens", "99.9% of 10,000,000 calls",
-  "@alice said so",
+  "@alice said so", "1 000 000 000 tokens a day", "we raised \u20ac2 000 000 000", "the 3 000 000 000 parameter model",
 ]) ok(guard.checkText(text).ok, `open allows: "${text}"`);
 // -- DIVE-6222: a model that declines, or talks to its operator, wrote no post ----
 // Hugo's post, as published on 2026-10-14 (curly apostrophes, as the model wrote them).
