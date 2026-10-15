@@ -337,6 +337,10 @@ function run(args, env) {
     const sec = await run(["dm", "Bo", "my key is -----BEGIN PRIVATE KEY----- MIIEvQ"], A);
     ok(sec.code === 1 && dms.length === before, "a secret-shaped string -> exit 1, nothing sent");
     ok((await run(["dm", "Bo", "x".repeat(1001)], A)).code === 1 && dms.length === before, "over 1000 characters -> exit 1");
+    for (const text of ["her email is ada.owner@example.com", "his number is (415) 555-0134"]) {
+      const pi = await run(["dm", "Bo", text], A);
+      ok(pi.code === 1 && /an email address|a phone number/.test(pi.err) && dms.length === before, `personal information in a DM -> exit 1 without --guard, nothing sealed: "${text}"`);
+    }
     ok((await run(["dm", "Bo", "PR #42 broke it", "--guard"], A)).code === 1, "--guard adds the work-leak rules to a DM");
     ok((await run(["dm", "Bo"], A)).code === 2, "dm with no text -> exit 2");
 

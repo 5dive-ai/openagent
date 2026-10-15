@@ -85,6 +85,38 @@ const ALLOW = [
 ];
 for (const text of ALLOW) ok(guard.checkText(text).ok && guard.checkText(text, { fleet: true }).ok, `allows: "${text.slice(0, 40)}"`);
 ok(!guard.checkText("x".repeat(guard.MAX_TEXT + 1)).ok, "refuses past the length cap");
+// -- DIVE-6333: an email or a phone number is refused for every agent, never echoed --
+const PERSONAL = [
+  ["my owner is ada.owner@example.com", guard.EMAIL_REASON],
+  ["write to x@y.co.uk", guard.EMAIL_REASON],
+  ["call +44 20 7946 0958 after six", guard.PHONE_REASON],
+  ["the shop line is (415) 555-0134", guard.PHONE_REASON],
+  ["ring +7 912 345-67-89 for the keys", guard.PHONE_REASON],
+  ["+442079460958", guard.PHONE_REASON],
+  ["+1 (415) 555-0134", guard.PHONE_REASON],
+  ["415-555-0134", guard.PHONE_REASON],
+  ["1-800-555-0134", guard.PHONE_REASON],
+  ["020 7946 0958", guard.PHONE_REASON],
+  ["06 12 34 56 78", guard.PHONE_REASON],
+  ["0044 20 7946 0958", guard.PHONE_REASON],
+  ["call +44\u20117946\u20110958 now", guard.PHONE_REASON],
+  ["\uff0b\uff14\uff14 20 7946 0958", guard.PHONE_REASON],
+  ["my mobile is 0171 1234567", guard.PHONE_REASON],
+  ["the office is on 030 12345678", guard.PHONE_REASON],
+];
+for (const [text, what] of PERSONAL) {
+  for (const fleet of [false, true]) {
+    const r = guard.checkText(text, { fleet });
+    ok(!r.ok && r.reasons.includes(what) && r.reasons.every((x) => !/\d{3}|@/.test(x)), `${fleet ? "fleet" : "open"} refuses ${what}, value not echoed: "${text}"`);
+  }
+}
+// Negative control: years, versions, prices, counts and dates are not phones.
+for (const text of [
+  "in 2026 the agents arrived", "v0.58.1 is out", "$1,299 for a seat", "12 000 users", "12 000 000 users",
+  "2026-10-15 was a Thursday", "05.10.2026 12:00", "+15% growth", "up 3-1 at half time", "posts are 100-2000 chars",
+  "ISBN 978-0-13-468599-1", "at 51.5074, -0.1278", "\u20ac0,99 a month", "$0.0025 per 1k tokens", "99.9% of 10,000,000 calls",
+  "@alice said so", "1 000 000 000 tokens a day", "we raised \u20ac2 000 000 000", "the 3 000 000 000 parameter model",
+]) ok(guard.checkText(text).ok, `open allows: "${text}"`);
 // -- DIVE-6222: a model that declines, or talks to its operator, wrote no post ----
 // Hugo's post, as published on 2026-10-14 (curly apostrophes, as the model wrote them).
 const HUGO = "I\u2019m holding this one. The source page you\u2019ve shared is a personal profile, not a news story, and doesn\u2019t contain a headline or summary about recreational programming. I\u2019d need an actual article or statement about what that means and why it matters before I can write about it.";
@@ -236,6 +268,10 @@ function run(args, env) {
     ok(badLink.code === 1 && landed.posts.length === 0, "--guard: a PR link is refused and not sent");
     const secret = await run(["post", "my key: -----BEGIN OPENSSH PRIVATE KEY----- b3Blbn"], env);
     ok(secret.code === 1 && /secret-shaped/.test(secret.err) && landed.posts.length === 0, "a private-key-shaped string is refused without --guard");
+    for (const [text, what] of [["reach my owner at ada.owner@example.com", "an email address"], ["call my owner on +44 20 7946 0958", "a phone number"]]) {
+      const pi = await run(["post", text], env);
+      ok(pi.code === 1 && pi.err.includes(what) && !pi.err.includes(text.split(" on ").pop().split(" at ").pop()) && landed.posts.length === 0, `${what} is refused without --guard, not echoed, nothing sent`);
+    }
 
     // -- DIVE-6320: a text that is only a placeholder is refused and never sent; "a <b> c" still posts --
     for (const [args, what] of [
