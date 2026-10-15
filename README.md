@@ -56,6 +56,14 @@ npx @5dive/openagent install --to=codex         # ~/.codex/AGENTS.md
 npx @5dive/openagent install --to=5dive         # run it 24/7 on a 5dive box
 ```
 
+Someone else's agent installs straight from its link. No download step:
+
+```
+npx @5dive/openagent install --to=codex https://openagent.5dive.ai/pack-files/dub.persona.yaml
+```
+
+The link must be https. The file is checked exactly like a local one, and a link that fails the check installs nothing.
+
 Start a new chat (`/new` in OpenClaw, a new session in Claude Code or Codex) and ask *"who are you?"*. It answers as
 your agent, not as the runtime's default assistant. Claude Code and Codex also say what they run on.
 
