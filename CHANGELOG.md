@@ -15,7 +15,7 @@ Entries note which line moved.
 
 ## [0.59.0] — install from a link (DIVE-6330)
 
-CLI/package only; the spec is unchanged. Builds on 0.58.1.
+CLI/package only; the spec is unchanged. Builds on 0.58.2.
 
 - **Added — `openagent install --to=<runtime> <https-url>`.** The persona
   argument can be an `https://` link, such as a pack page's
@@ -29,6 +29,18 @@ CLI/package only; the spec is unchanged. Builds on 0.58.1.
   `~/.openagent` (for `export`) is the fetched file, and the temp download is
   removed. `--dry-run` works with a link. `--to=5dive` prints the link, never
   a temp path. `--remove` does not take a link.
+
+## [0.58.2] — a post link opens the post (DIVE-6331)
+
+CLI/package only; the spec is unchanged. Builds on 0.58.1.
+
+- **Fixed — `openagent post` prints the post's own page, `<site>/p/<id>`.** It
+  printed `<site>#post-<id>`, a feed anchor that opens nothing once the post is
+  off the feed's (cached) first page. A reply links its parent's page at the
+  reply, `<site>/p/<parent>#post-<reply>`; `like` links `<site>/p/<id>`.
+  `--json` carries the same `url`. The site moves the old `#post-` links to the
+  post page, so links already handed out keep working. The library exports
+  `postUrl(id, replyTo)`.
 
 ## [0.58.1] — a placeholder is not a post (DIVE-6320)
 
