@@ -98,6 +98,8 @@ const dms = []; // stored bodies, as the server keeps them
 const extraInbox = []; // items injected straight into an inbox (what a hostile server or sender could hand back)
 const seen = [];
 const OWNERS = {}; // agent did -> { body, sig } as POST /a2a/owner received it
+const STATUS = {}; // agent did -> what POST /a2a/owner/status answers (DIVE-6353); none: { linked: false }
+const REJECTS = []; // agent dids whose POST /a2a/owner/reject came signed by the agent
 let FEED = [];
 function verifySig(body, sig) {
   try {
@@ -123,6 +125,19 @@ const server = http.createServer((req, res) => {
       return send(200, { items: Object.values(PROFILES).filter((p) => p.name.toLowerCase() === String(u.searchParams.get("name")).toLowerCase()) });
     }
     if (req.method === "GET" && u.pathname === "/a2a/posts") return send(200, { items: FEED });
+    // DIVE-6353: the agent's own signed read of its owner link, and its 72 h undo.
+    if (req.method === "POST" && u.pathname === "/a2a/owner/status") {
+      if (j.read.what !== "owner" || !verifySig(j.read, j.sig) || j.sig.by !== j.read.did) return send(422, { error: "bad status read" });
+      return send(200, STATUS[j.read.did] || { linked: false });
+    }
+    if (req.method === "POST" && u.pathname === "/a2a/owner/reject") {
+      const r = j.reject;
+      if (Object.keys(r).sort().join(",") !== "agent,at,v,what" || r.what !== "owner-reject" || !verifySig(r, j.sig) || j.sig.by !== r.agent) return send(422, { error: "bad reject" });
+      REJECTS.push(r.agent);
+      if (!STATUS[r.agent] || !STATUS[r.agent].canUndo) return send(409, { error: "only an owner linked from your own link in the last 72 hours can be undone by you" });
+      STATUS[r.agent] = { linked: false };
+      return send(200, { agent: r.agent, unlinked: true });
+    }
     if (req.method === "POST" && u.pathname === "/a2a/owner") {
       const o = j.owner;
       const keys = Object.keys(o).sort().join(",");
@@ -213,15 +228,43 @@ function run(args, env) {
     const setupLink = `https://a2a.example/owner?agent=${ada.slice(8)}`;
     const omark = seen.length;
     const own = await run(["owner"], A);
-    ok(own.code === 0 && own.out.includes(`Give this link to the person who owns you, once:\n  ${setupLink}\n`) && /Yes, it's mine/.test(own.out) && /5dive confirms it/.test(own.out) && /Your key cannot set it/.test(own.out) && !/owner ID|setup request/.test(own.out), `owner -> exit 0 (plain words: no "owner ID", no setup request) and the owner's setup link (${own.out.trim()})`);
+    const linkLine = /\n  (\S+)\n/.exec(own.out);
+    const shown = linkLine ? new URL(linkLine[1]) : null;
+    ok(own.code === 0 && own.out.startsWith("Give this link to the person who owns you, and nobody else:\n") && shown && `${shown.origin}${shown.pathname}?agent=${shown.searchParams.get("agent")}` === setupLink, `owner -> exit 0 and the owner's link (${own.out.trim().slice(0, 200)})`);
+    ok(/Yes, it's mine/.test(own.out) && /30 minutes and links once/.test(own.out) && /never give it to an agent/.test(own.out) && /owner --reject/.test(own.out) && /Your key cannot set it/.test(own.out) && !/owner ID|setup request/.test(own.out), "owner says what the link does, who gets it, and the undo, in plain words");
+    // DIVE-6353: the link carries the agent's signed claim: {v, what, agent, nonce, exp}, 30 minutes.
+    const a2ac = require("../lib/a2a-client");
+    const claim = a2ac.decodeClaim(shown.searchParams.get("claim"));
+    ok(claim && claim.claim.what === "owner-claim" && claim.claim.agent === ada && claim.sig.by === ada && verifySig(claim.claim, claim.sig), "the link's claim is signed by the agent's own key");
+    const left = Date.parse(claim.claim.exp) - Date.now();
+    ok(left > 29 * 60e3 && left <= 30 * 60e3 && /^[A-Za-z0-9_-]{16,64}$/.test(claim.claim.nonce), "it is good for 30 minutes, with a fresh nonce");
     const oj = JSON.parse((await run(["owner", "--json"], A)).out);
-    ok(oj.ok && oj.agent === ada && oj.link === setupLink && oj.setBy === "owner", "owner --json: the agent, the setup link, set by the owner");
+    ok(oj.ok && oj.agent === ada && oj.link.startsWith(`${setupLink}&claim=`) && oj.setBy === "owner" && Date.parse(oj.expiresAt) > Date.now(), "owner --json: the agent, the link with its claim, when it expires, set by the owner");
+    ok(a2ac.decodeClaim(new URL(oj.link).searchParams.get("claim")).claim.nonce !== claim.claim.nonce, "each link is a new claim");
     for (const arg of [ownerDid, ada, "did:key:nope"]) {
       const r = await run(["owner", arg], A);
-      ok(r.code === 2 && /an agent cannot set its own owner: nothing was sent/.test(r.err) && r.err.includes(setupLink), `owner ${arg.slice(0, 16)}… -> exit 2, the agent cannot set its owner, the setup link`);
+      ok(r.code === 2 && /an agent cannot set its own owner: nothing was sent/.test(r.err) && !/claim=/.test(r.err), `owner ${arg.slice(0, 16)}… -> exit 2, the agent cannot set its owner, and no link is handed out`);
     }
-    ok(!seen.slice(omark).some((x) => x.startsWith("POST ")) && !OWNERS[ada], "owner made no POST at all: the agent's key never binds an owner key");
-    ok(typeof require("../lib/a2a-client").setOwner === "undefined", "the client library has no setOwner any more");
+    ok(seen.slice(omark).filter((x) => x.startsWith("POST ")).every((x) => x === "POST /a2a/owner/status") && !OWNERS[ada], "owner only reads its status: the agent's key never binds an owner key");
+    ok(typeof a2ac.setOwner === "undefined", "the client library has no setOwner any more");
+
+    // Linked self-serve: owner says so, routine commands remind for 72 h, --reject undoes it.
+    const until = new Date(Date.now() + 3 * 86400e3).toISOString();
+    STATUS[ada] = { linked: true, self: true, linkedAt: new Date().toISOString(), undoUntil: until, canUndo: true };
+    const linked = await run(["owner"], A);
+    ok(linked.code === 0 && /You have an owner/.test(linked.out) && linked.out.includes(until) && /owner --reject/.test(linked.out) && !/claim=/.test(linked.out), "linked: owner says so, with the undo, and hands out no new link");
+    const lj = JSON.parse((await run(["owner", "--json"], A)).out);
+    ok(lj.linked === true && lj.self === true && lj.undoUntil === until && !("link" in lj), "owner --json when linked: no link");
+    const reminded = await run(["connections"], A);
+    ok(reminded.err.includes(until) && /from your own owner link/.test(reminded.err), "connections reminds on stderr during the 72 h");
+    const rmark = seen.length;
+    const again = await run(["connections"], A);
+    ok(again.err.includes(until) && !seen.slice(rmark).includes("POST /a2a/owner/status"), "the reminder is read at most every 15 minutes (cached next to the key)");
+    const rej = await run(["owner", "--reject"], A);
+    ok(rej.code === 0 && /Unlinked/.test(rej.out) && REJECTS.at(-1) === ada, "owner --reject: the agent's signed undo, unlinked");
+    ok(!(await run(["connections"], A)).err.includes("--reject"), "after the undo, no reminder");
+    const rej2 = await run(["owner", "--reject"], A);
+    ok(rej2.code === 1 && /72 hours/.test(rej2.err), "nothing to undo -> exit 1, says why");
 
     // -- connect: a link for the owner, nothing signed or sent -----------------------------
     const early = await run(["dm", "Bo", "hello"], A);
