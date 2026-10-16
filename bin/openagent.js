@@ -72,6 +72,7 @@ const USAGE = `${bold("openagent")} — OpenAgent persona spec tooling (spec v0.
 ${bold("Usage")}
   openagent init [--yes] [--name <n>] [--role <job>] [--face <look>] [--voice <rule>]... [--vibe|--bio <line>]
                  [--sample <line>] [--face-ref <path|url>] [--id <id>] [--company|--org <o>] [-o <file>] [--force] [--no-sign] [--no-publish] [--guard]
+                 [--from hermes|openclaw|claude-code|codex]
   openagent install --to=hermes|openclaw|claude-code|codex|5dive [<persona-file>|<https-url>] [--dir <slot-dir>] [--dry-run] [--remove] [--yes]
   openagent export --from=hermes|openclaw|claude-code|codex [--memory] [--no-skills] [--persona <file>] [--dir <dir>] [--project <path>] [-o agent.tar.gz] [--json]
   openagent import <agent.tar.gz> --to=hermes|openclaw|claude-code|codex|5dive [--dir <dir>] [--project <path>] [--overwrite] [--dry-run] [--json]
@@ -127,6 +128,11 @@ ${bold("init")}
   key is the account, no signup. The persona is also kept at
   ~/.openagent/persona.yaml, so running init again re-publishes it.
   --no-publish (or --no-sign) keeps everything local.
+  ${bold("--from <harness>")} keeps the name and persona the agent already has: it
+  reads the file that harness takes its identity from (the one install --to=
+  writes: Hermes SOUL.md, OpenClaw IDENTITY.md / AGENTS.md / SOUL.md, Claude Code
+  CLAUDE.md, Codex AGENTS.md) and proposes what it states (a "Name:" line, "You
+  are <Name>, the <job>"). A flag you pass wins; init fills only what is missing.
 
 ${bold("install")}
   Puts the persona into the slot a runtime actually reads, so asked "who are
@@ -377,6 +383,7 @@ ${bold("delegation")}
 
 ${bold("Examples")}
   openagent init --yes --name "<your name>" --role "<what you do>"   # make an agent, no questions
+  openagent init --yes --from=hermes                           # keep the name and persona Hermes already has
   openagent install --to=hermes <id>.persona.yaml              # Hermes now answers as your agent
   openagent install --to=openclaw <id>.persona.yaml            # so does OpenClaw
   openagent install --to=claude-code <id>.persona.yaml         # and Claude Code
@@ -1452,6 +1459,10 @@ async function cmdInit(rawArgs) {
     else if (a === "--no-sign") opts.noSign = true;
     else if (a === "--no-publish") opts.noPublish = true;
     else if (a === "--guard") opts.guard = true;
+    else if (a === "--from") {
+      if (!needsValue(a, i)) return 2;
+      opts.from = args[++i];
+    }
     else if (a === "-h" || a === "--help") {
       process.stdout.write(USAGE);
       return 0;
@@ -1473,6 +1484,22 @@ async function cmdInit(rawArgs) {
     persona = YAML.parse(fs.readFileSync(homePersona, "utf8"));
     process.stdout.write(`${dim("already set up:")} ${bold(persona.name || persona.id)} ${dim(`(${homePersona})`)}\n`);
   } else {
+    // DIVE-6350: an agent that already has a name and persona in its harness keeps them.
+    if (opts.from) {
+      const { readHarnessPersona } = require("../lib/harness-persona");
+      let h;
+      try {
+        h = readHarnessPersona(opts.from);
+      } catch (e) {
+        process.stderr.write(red(`init: ${e.message}\n`));
+        return 2;
+      }
+      opts.fromHarness = h;
+      const kept = [["name", h.name], ["job", h.role], ["vibe", h.vibe], ["voice", h.voice], ["face", h.faceRef]].filter(([, v]) => v);
+      if (!h.found.length) process.stdout.write(dim(`from ${h.harness}: no persona file yet (${h.files.join(", ")}), so every pick is yours\n`));
+      else if (!kept.length) process.stdout.write(dim(`from ${h.harness}: no name or persona stated in ${h.found.join(", ")}, so every pick is yours\n`));
+      else process.stdout.write(`${dim(`from ${h.harness} (${h.found.join(", ")}):`)} ${kept.map(([k, v]) => `${k} ${bold(v)}`).join(dim(" · "))}${dim(" (a flag you passed wins)")}\n`);
+    }
     const r = await runInit(opts);
     if (r.code !== 0) return r.code;
 
