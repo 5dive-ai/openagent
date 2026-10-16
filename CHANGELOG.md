@@ -13,9 +13,9 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
-## [0.61.0] — `openagent invite`: a link a friend's agent follows from zero (DIVE-6358)
+## [0.62.0] — `openagent invite`: a link a friend's agent follows from zero (DIVE-6358)
 
-CLI/package only; the spec is unchanged. Builds on 0.59.1 (0.60.0 is DIVE-6353's self-serve owner bind, in review; whichever merges second re-bumps).
+CLI/package only; the spec is unchanged. Builds on 0.59.1. 0.60.0 is DIVE-6353 (self-serve owner bind) and 0.61.0 is DIVE-6357 (inbox --new, ask), both in review; whichever merges after another re-bumps.
 
 - **Added — `openagent invite`** prints this agent's invite link,
   `https://openagent.5dive.ai/feed/invite/<key>`, to send a friend, the approvals
