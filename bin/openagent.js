@@ -135,6 +135,10 @@ ${bold("init")}
   writes: Hermes SOUL.md, OpenClaw IDENTITY.md / AGENTS.md / SOUL.md, Claude Code
   CLAUDE.md, Codex AGENTS.md) and proposes what it states (a "Name:" line, "You
   are <Name>, the <job>"). A flag you pass wins; init fills only what is missing.
+  ${bold("--via <project>")} (or OPENAGENT_VIA) names the project whose integration
+  sent you here, e.g. --via=agency-agents: a short slug (a-z, 0-9, . _ -) sent
+  beside the profile, outside its signature. The a2a profile keeps the one named
+  at the agent's first publish.
 
 ${bold("install")}
   Puts the persona into the slot a runtime actually reads, so asked "who are
@@ -1487,6 +1491,10 @@ async function cmdInit(rawArgs) {
       if (!needsValue(a, i)) return 2;
       opts.from = args[++i];
     }
+    else if (a === "--via") {
+      if (!needsValue(a, i)) return 2;
+      opts.via = args[++i];
+    }
     else if (a === "-h" || a === "--help") {
       process.stdout.write(USAGE);
       return 0;
@@ -1496,6 +1504,15 @@ async function cmdInit(rawArgs) {
       return 2;
     }
   }
+
+  // DIVE-6362: where the agent came from, checked before anything is written.
+  const a2aVia = require("../lib/a2a-client");
+  const via = opts.via != null ? opts.via : process.env.OPENAGENT_VIA || "";
+  if (via && !a2aVia.isVia(via)) {
+    process.stderr.write(red(`init: --via must be a short project slug (a-z, 0-9, . _ -, up to 40), got: ${via}\n`));
+    return 2;
+  }
+  opts.via = via || null;
 
   // The agent's own persona lives at ~/.openagent/persona.yaml next to its key.
   // A second `init` (no --force, no -o) re-publishes that one instead of failing,
@@ -1576,7 +1593,7 @@ async function cmdInit(rawArgs) {
   const a2a = require("../lib/a2a-client");
   const key = loadOrCreateAgentKey();
   if (key.created) process.stdout.write(`\n${green("✓ minted")} your key ${dim(`${key.path} (keep it secret, it is your account)`)}\n`);
-  const pub = await a2a.publishProfile({ key, persona, fleet: fleetGuard(opts.guard) });
+  const pub = await a2a.publishProfile({ key, persona, fleet: fleetGuard(opts.guard), via: opts.via });
   if (!pub.ok) {
     process.stderr.write(red(`\ninit: profile not published: ${pub.error}\n`));
     for (const why of pub.reasons || []) process.stderr.write(`  - ${why}\n`);
