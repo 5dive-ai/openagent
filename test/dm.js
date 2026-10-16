@@ -98,6 +98,7 @@ const dms = []; // stored bodies, as the server keeps them
 const extraInbox = []; // items injected straight into an inbox (what a hostile server or sender could hand back)
 const seen = [];
 const OWNERS = {}; // agent did -> { body, sig } as POST /a2a/owner received it
+const INVITES = {}; // id -> { id, agent, live }: invites an OWNER made on the owner page (DIVE-6393)
 let FEED = [];
 function verifySig(body, sig) {
   try {
@@ -127,6 +128,10 @@ const server = http.createServer((req, res) => {
       return send(200, { items: Object.values(PROFILES).filter((p) => p.name.toLowerCase() === String(u.searchParams.get("name")).toLowerCase()) });
     }
     if (req.method === "GET" && u.pathname === "/a2a/posts") return send(200, { items: FEED });
+    if (req.method === "GET" && u.pathname.startsWith("/a2a/invites/")) {
+      const v = INVITES[decodeURIComponent(u.pathname.slice("/a2a/invites/".length))];
+      return v ? send(200, { id: v.id, agent: v.agent, live: v.live, ...(v.live ? {} : { reason: "expired" }) }) : send(404, { error: "no such invite" });
+    }
     if (req.method === "POST" && u.pathname === "/a2a/owner") {
       const o = j.owner;
       const keys = Object.keys(o).sort().join(",");
@@ -250,10 +255,12 @@ function run(args, env) {
     ok((await run(["invite"], C)).code === 2, "invite with no key -> exit 2");
     const imark = seen.length;
     const inv = await run(["invite"], A);
-    ok(inv.code === 0 && inv.out.includes(`Send this link to a friend, for their agent:\n  ${inviteLink}\n`) && inv.out.includes(`\n  ${setupLink}\n`) && /Opening the link changes nothing/.test(inv.out) && /once both owners have said yes/.test(inv.out), `invite -> exit 0, the invite link, the approvals page, nothing until both owners say yes (${inv.out.trim()})`);
-    ok(/^Tell your owner: "Here is my invite link\. Send it to a friend whose agent I should talk to\."$/m.test(inv.out) && !/did:key:/.test(inv.out), "invite gives the line for the owner, with no did in it");
+    // DIVE-6393: it points the owner to "Invite a friend" on the owner page first (the one-tap link only they make).
+    ok(inv.code === 0 && inv.out.startsWith(`Your owner makes the invite link: on this page they tap "Invite a friend" under your name:\n  ${setupLink}\n`) && /connected as soon as its own owner says yes/.test(inv.out), `invite -> exit 0, first the owner page where the owner makes the link (${inv.out.trim()})`);
+    ok(inv.out.includes(`Or send this link to a friend, for their agent. It names you only, so your owner says yes too:\n  ${inviteLink}\n`) && /Opening either link changes nothing/.test(inv.out), "then the plain link, which names the agent only and still needs this owner's yes");
+    ok(/^Tell your owner: "Open this page and tap 'Invite a friend' under my name\. Send that link to a friend whose agent I should talk to\."$/m.test(inv.out) && !/did:key:/.test(inv.out), "invite gives the line for the owner, with no did in it");
     const ij = JSON.parse((await run(["invite", "--json"], A)).out);
-    ok(ij.ok && ij.agent === ada && ij.link === inviteLink && ij.approvals === setupLink && ij.sent === false, "invite --json: the agent, the link, the approvals page, sent false");
+    ok(ij.ok && ij.agent === ada && ij.link === inviteLink && ij.ownerInvite === setupLink && ij.approvals === setupLink && ij.sent === false, "invite --json: the agent, the owner page (ownerInvite), the plain link, sent false");
     ok((await run(["invite", "Bo"], A)).code === 2, "invite takes no argument -> exit 2");
     ok(require("../lib/a2a-client").inviteUrl(ada) === `https://openagent.5dive.ai/feed/invite/${ada.slice(8)}`, "the invite link defaults to https://openagent.5dive.ai/feed/invite/<key>");
     const D = envFor("dee");
@@ -274,6 +281,21 @@ function run(args, env) {
     ok(fij.ok && fij.to === ada && fij.name === "Ada" && fij.sent === false && fij.link === cyLink, "connect <invite link> --json resolves to the inviter's did, sent false");
     const cyByName = JSON.parse((await run(["connect", "Ada", "--json"], C)).out);
     ok(cyByName.to === fij.to && cyByName.link === fij.link, "connect <invite link> and connect <name> resolve to the same did and link");
+    // An invite Ada's OWNER made (DIVE-6393): the link carries ?i=<id>, and the owner link carries it on.
+    const IID = "AbCdEfGhIjKlMnOpQrStUv";
+    INVITES[IID] = { id: IID, agent: ada, live: true };
+    INVITES["ZZZZZZZZZZZZZZZZZZZZZZ"] = { id: "ZZZZZZZZZZZZZZZZZZZZZZ", agent: ada, live: false };
+    const viaOwner = await run(["connect", `${inviteLink}?i=${IID}`], C);
+    ok(viaOwner.code === 0 && viaOwner.out.includes(`connect with "Ada":\n  ${cyLink}&invite=${IID}\n`) && /Their owner made this invite, so you are connected as soon as your owner says yes/.test(viaOwner.out), `connect <owner-made invite> -> the owner link carries the invite, connected on your owner's yes (${viaOwner.out.trim()})`);
+    const voj = JSON.parse((await run(["connect", `${inviteLink}?i=${IID}`, "--json"], C)).out);
+    ok(voj.ok && voj.to === ada && voj.invite === IID && voj.link === `${cyLink}&invite=${IID}` && voj.sent === false, "--json: invite is the id, sent false");
+    const dead = await run(["connect", `${inviteLink}?i=ZZZZZZZZZZZZZZZZZZZZZZ`], C);
+    ok(dead.code === 0 && dead.out.includes(`  ${cyLink}\n`) && /expired or was stopped, so their owner says yes too/.test(dead.out), "an invite that is not live: the plain owner link, and it says their owner says yes too");
+    const unknown = JSON.parse((await run(["connect", `${inviteLink}?i=QQQQQQQQQQQQQQQQQQQQQQ`, "--json"], C)).out);
+    ok(unknown.invite === null && unknown.link === cyLink, "an invite id nobody made: no invite on the owner link");
+    const otherAgent = JSON.parse((await run(["connect", `https://a2a.example/invite/${bo.slice(8)}?i=${IID}`, "--json"], C)).out);
+    ok(otherAgent.to === bo && otherAgent.invite === null, "Ada's invite id on a link naming Bo: not carried");
+    ok(require("../lib/a2a-client").ownerUrl(cy, { connect: ada, invite: "bad id" }) === `https://openagent.5dive.ai/feed/owner?agent=${cy.slice(8)}&connect=${ada.slice(8)}`, "ownerUrl drops an invite that is not an id");
     const byProfile = JSON.parse((await run(["connect", `https://openagent.5dive.ai/feed/agent/${ada.slice(8)}?ref=x`, "--json"], C)).out);
     ok(byProfile.to === ada, "a profile link resolves the same did");
     const own2 = await run(["connect", inviteLink], A);
