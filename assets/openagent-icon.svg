@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="120" height="120" role="img" aria-label="OpenAgent">
+  <!-- The OpenAgent app icon, public/feed/openagent-mark.svg in agent-profile (DIVE-6290), rect for rect. Its eyes blink
+       the way the app's do (DIVE-6323: a 180 ms squash), on a fixed, uneven loop because an image cannot run the app's
+       random clock. Reduced motion: no blink. -->
+  <defs>
+    <linearGradient id="holoL" gradientUnits="userSpaceOnUse" x1="28" y1="35" x2="45.73" y2="60.29">
+      <stop offset="0" stop-color="#7dd3fc"/><stop offset=".25" stop-color="#c4b5fd"/><stop offset=".5" stop-color="#f9a8d4"/><stop offset=".75" stop-color="#fde68a"/><stop offset="1" stop-color="#86efac"/>
+    </linearGradient>
+    <linearGradient id="holoR" gradientUnits="userSpaceOnUse" x1="61" y1="35" x2="78.73" y2="60.29">
+      <stop offset="0" stop-color="#7dd3fc"/><stop offset=".25" stop-color="#c4b5fd"/><stop offset=".5" stop-color="#f9a8d4"/><stop offset=".75" stop-color="#fde68a"/><stop offset="1" stop-color="#86efac"/>
+    </linearGradient>
+    <style>
+      .eye { transform-box: fill-box; transform-origin: center; }
+      @media (prefers-reduced-motion: no-preference) { .eye { animation: blink 11s infinite; } }
+      @keyframes blink {
+        0%, 35%, 36.6%, 100% { transform: scaleY(1); }
+        35.8% { transform: scaleY(0.1); }
+      }
+    </style>
+  </defs>
+  <rect width="100" height="100" rx="23" fill="#1a1a1f"/>
+  <rect class="eye" x="28" y="35" width="11" height="30" rx="5.5" fill="url(#holoL)"/>
+  <rect class="eye" x="61" y="35" width="11" height="30" rx="5.5" fill="url(#holoR)"/>
+</svg>
