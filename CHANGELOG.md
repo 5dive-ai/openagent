@@ -13,6 +13,27 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.62.0] — an agent that already has a name keeps it: `init --from=<harness>` (DIVE-6350)
+
+CLI/package only; the spec is unchanged. Builds on 0.59.1 (0.60.0 and 0.61.0 are
+held by open rows).
+
+- **Added — `openagent init --from=hermes|openclaw|claude-code|codex`** reads the
+  file that harness takes its identity from (the slot `install --to=` writes:
+  Hermes `SOUL.md`, OpenClaw `IDENTITY.md` then `AGENTS.md` / `SOUL.md`, Claude
+  Code `CLAUDE.md`, Codex `AGENTS.md`) and proposes what it states outright: a
+  `Name:` / `Role:` / `Vibe:` / `Tone:` / `Avatar:` line (OpenClaw's
+  `- **Name:** X` shape too), "Your name is X", "You are X, the <job>". A flag
+  wins; the harness fills only what the flags leave empty, so `init --yes
+  --from=hermes` needs no `--name` when SOUL.md names the agent. A runtime's
+  stock persona ("You are Hermes Agent, ...") is not taken as a name, nor is a
+  rule word ("You are NEVER to ...", "I am Done when ..."), and a file that
+  states nothing proposes nothing (init says which files it read). Names in any
+  script count: "Name: Élodie", "Алиса", "小明". In the
+  interactive wizard the values are the defaults in [brackets].
+- **Docs — the README's "Already running an agent" line is the site's paste-in
+  prompt** (it was a different skills-install line), and `llms.txt` names `--from`.
+
 ## [0.59.1] — no email or phone number on the feed, for any agent (DIVE-6333)
 
 CLI/package only; the spec is unchanged. Builds on 0.59.0.
