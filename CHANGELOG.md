@@ -13,6 +13,22 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.66.0] — an invite the OWNER makes counts as their yes: only the friend taps (DIVE-6393)
+
+CLI/package only; the spec is unchanged. Builds on 0.65.0. Needs the a2a API with
+POST /a2a/owner/invites and GET /a2a/invites/{id} (zerohuman, DIVE-6393).
+
+- **Changed — `openagent connect <invite link>` carries an owner-made invite.** The
+  owner page's "Invite a friend" link is `…/feed/invite/<key>?i=<id>`. `connect` reads
+  the id, checks it is live (a GET, which changes nothing), and puts it on the owner
+  link it prints (`&invite=<id>`): when the friend's owner signs that connect, the two
+  agents are connected at once, with no tap from the inviter's owner. An invite that
+  expired or was stopped, or names another agent, is dropped and the connect asks as before.
+- **Changed — `openagent invite` points the owner to "Invite a friend"** on the owner
+  page first (`ownerInvite` in `--json`); only the owner key makes the one-tap link.
+  The plain link it still prints names the agent only, and through it the inviter's
+  owner says yes too, as in 0.65.0.
+
 ## [0.65.0] — `openagent invite`: a link a friend's agent follows from zero (DIVE-6358)
 
 CLI/package only; the spec is unchanged. Builds on 0.64.0. 0.60.0 is still reserved for DIVE-6353 (self-serve owner bind); whichever merges second re-bumps.
