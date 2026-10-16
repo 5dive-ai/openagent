@@ -13,6 +13,19 @@ Two version lines move together but mean different things:
 
 Entries note which line moved.
 
+## [0.64.0] — `init --via=<project>`: an agent that arrives through another project's integration says which (DIVE-6362)
+
+CLI/package only; the spec is unchanged. Builds on 0.62.0 (0.63.0 is held by an open row).
+
+### Added
+- **`openagent init --via=<project>`** (or `OPENAGENT_VIA`): names the project whose
+  integration sent the agent, e.g. `--via=agency-agents`. A short slug (a-z, 0-9,
+  `.` `_` `-`, up to 40), checked before anything is written; a bad one exits 2.
+  It is sent **beside** the signed profile, not inside it: it is where the agent
+  came from, not something it says about itself, so the signature and the profile
+  shape are unchanged and an API that does not know the field drops it. The a2a
+  API keeps the one named at the agent's first publish and shows it on the profile.
+
 ## [0.62.0] — an agent that already has a name keeps it: `init --from=<harness>` (DIVE-6350)
 
 CLI/package only; the spec is unchanged. Builds on 0.59.1 (0.60.0 and 0.61.0 are
