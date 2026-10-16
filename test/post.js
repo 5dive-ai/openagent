@@ -191,7 +191,7 @@ function verifySig(body, sig) {
   if (didKeyFromPublicKey(sig.key) !== sig.by) return false;
   return crypto.verify(null, canonicalBytes(body), toPublicKey(sig.key), Buffer.from(sig.sig, "base64"));
 }
-const landed = { profiles: [], posts: [] };
+const landed = { profiles: [], posts: [], vias: [] };
 const server = http.createServer((req, res) => {
   let raw = "";
   req.on("data", (c) => (raw += c));
@@ -202,6 +202,7 @@ const server = http.createServer((req, res) => {
     if (req.url === "/a2a/profiles") {
       if (!verifySig(j.profile, j.sig) || j.sig.by !== j.profile.did) return send(422, { error: "bad sig" });
       landed.profiles.push(j.profile);
+      landed.vias.push(j.via);
       return send(200, { did: j.profile.did });
     }
     if (req.url === "/a2a/posts") {
@@ -348,6 +349,21 @@ function run(args, env) {
     ok(pic.code === 0 && landed.posts[before + 2].image === "https://images.example.org/whiteboard.jpg", "--image rides the signed post");
     const badPic = await run(["post", "--image=http://10.0.0.1/x.png", "look"], env);
     ok(badPic.code === 1 && landed.posts.length === before + 3, "--image on http/an IP is refused and not sent");
+
+    // -- init --via (DIVE-6362): the project that sent the agent, beside the signed profile
+    ok(landed.vias[0] === undefined, "init with no --via sends no via");
+    const viaEnv = { ...env, OPENAGENT_HOME: path.join(tmp, "via-home"), OPENAGENT_VIA: "" };
+    const viaInit = await run(["init", "--yes", "--name", "Vee", "--via=agency-agents", "-o", path.join(tmp, "vee.persona.yaml")], viaEnv);
+    const vi = landed.profiles.length - 1;
+    ok(viaInit.code === 0 && landed.profiles[vi].name === "Vee" && landed.vias[vi] === "agency-agents", "init --via=agency-agents sends via beside a profile the stub re-verified");
+    ok(!("via" in landed.profiles[vi]), "via is not inside the signed profile");
+    const envVia = await run(["init"], { ...viaEnv, OPENAGENT_VIA: "claude-code-templates" });
+    ok(envVia.code === 0 && landed.vias[landed.profiles.length - 1] === "claude-code-templates", "OPENAGENT_VIA works when no flag is passed (a re-publish sends it too; the API keeps the first)");
+    const sent = landed.profiles.length;
+    for (const bad of ["Agency Agents", "-x", "a".repeat(41)]) {
+      const r = await run(["init", "--yes", "--name", "Bad", "--via", bad, "-o", path.join(tmp, "bad.persona.yaml")], { ...env, OPENAGENT_HOME: path.join(tmp, "bad-home") });
+      ok(r.code === 2 && /--via must be a short project slug/.test(r.err) && landed.profiles.length === sent && !fs.existsSync(path.join(tmp, "bad.persona.yaml")), `init --via ${JSON.stringify(bad.slice(0, 12))} -> exit 2, nothing written or sent`);
+    }
   } finally {
     server.close();
     fs.rmSync(tmp, { recursive: true, force: true });
