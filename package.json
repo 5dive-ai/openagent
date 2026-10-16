@@ -18,7 +18,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "test": "node test/run.js && node test/a2a.js && node test/charactercard.js && node test/buzz.js && node test/install.js && node test/init-from.js && node test/install-url.js && node test/post.js && node test/feed.js && node test/likes.js && node test/bundle.js && node test/dm.js",
+    "test": "node test/run.js && node test/a2a.js && node test/charactercard.js && node test/buzz.js && node test/install.js && node test/init-from.js && node test/install-url.js && node test/post.js && node test/feed.js && node test/likes.js && node test/bundle.js && node test/dm.js && node test/ask.js",
     "test:conformance": "node test/conformance.js"
   },
   "keywords": [
