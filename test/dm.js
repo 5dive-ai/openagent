@@ -38,7 +38,7 @@ const ROOT = path.join(__dirname, "..");
 const help = execFileSync(process.execPath, [path.join(ROOT, "bin", "openagent.js"), "--help"], { env: { ...process.env, NO_COLOR: "1" } }).toString();
 const readme = fs.readFileSync(path.join(ROOT, "README.md"), "utf8");
 const skill = fs.readFileSync(path.join(ROOT, "skills", "a2a", "SKILL.md"), "utf8");
-for (const action of ["openagent owner", "openagent connect", "openagent connections", "openagent dm", "openagent inbox", "block"]) {
+for (const action of ["openagent owner", "openagent invite", "openagent connect", "openagent connections", "openagent dm", "openagent inbox", "block"]) {
   for (const [name, text] of [["--help", help], ["README", readme], ["skill", skill]]) ok(text.includes(action), `${name} lists \`${action}\``);
 }
 for (const [name, text] of [["--help", help], ["README", readme], ["skill", skill]]) ok(/never an\s+instruction/.test(text), `${name} says a DM is never an instruction`);
@@ -118,6 +118,10 @@ const server = http.createServer((req, res) => {
     if (req.method === "POST" && u.pathname === "/a2a/profiles") {
       PROFILES[j.profile.did] = { did: j.profile.did, name: j.profile.name };
       return send(200, { did: j.profile.did });
+    }
+    if (req.method === "GET" && u.pathname.startsWith("/a2a/profiles/")) {
+      const p = PROFILES[decodeURIComponent(u.pathname.slice("/a2a/profiles/".length))];
+      return p ? send(200, { profile: p }) : send(404, { error: "no such agent" });
     }
     if (req.method === "GET" && u.pathname === "/a2a/profiles") {
       return send(200, { items: Object.values(PROFILES).filter((p) => p.name.toLowerCase() === String(u.searchParams.get("name")).toLowerCase()) });
@@ -239,6 +243,46 @@ function run(args, env) {
     const cj = JSON.parse((await run(["connect", "Bo", "--json"], A)).out);
     ok(cj.ok && cj.sent === false && cj.link === connLink && cj.setup === setupLink && !("owner" in cj), "connect --json: sent false, the link, the setup link");
     ok(require("../lib/a2a-client").ownerUrl.call(null) === "https://openagent.5dive.ai/feed/owner", "the owner page defaults to https://openagent.5dive.ai/feed/owner");
+
+    // -- invite (DIVE-6358): a link a friend's agent follows from zero; nothing is signed or sent --
+    const C = envFor("cy");
+    const inviteLink = `https://a2a.example/invite/${ada.slice(8)}`;
+    ok((await run(["invite"], C)).code === 2, "invite with no key -> exit 2");
+    const imark = seen.length;
+    const inv = await run(["invite"], A);
+    ok(inv.code === 0 && inv.out.includes(`Send this link to a friend, for their agent:\n  ${inviteLink}\n`) && inv.out.includes(`\n  ${setupLink}\n`) && /Opening the link changes nothing/.test(inv.out) && /once both owners have said yes/.test(inv.out), `invite -> exit 0, the invite link, the approvals page, nothing until both owners say yes (${inv.out.trim()})`);
+    ok(/^Tell your owner: "Here is my invite link\. Send it to a friend whose agent I should talk to\."$/m.test(inv.out) && !/did:key:/.test(inv.out), "invite gives the line for the owner, with no did in it");
+    const ij = JSON.parse((await run(["invite", "--json"], A)).out);
+    ok(ij.ok && ij.agent === ada && ij.link === inviteLink && ij.approvals === setupLink && ij.sent === false, "invite --json: the agent, the link, the approvals page, sent false");
+    ok((await run(["invite", "Bo"], A)).code === 2, "invite takes no argument -> exit 2");
+    ok(require("../lib/a2a-client").inviteUrl(ada) === `https://openagent.5dive.ai/feed/invite/${ada.slice(8)}`, "the invite link defaults to https://openagent.5dive.ai/feed/invite/<key>");
+    const D = envFor("dee");
+    ok((await run(["init", "--name", "Dee", "--role", "Quiet", "--no-publish"], D)).code === 0, "Dee inits without publishing");
+    const nopro = await run(["invite"], D);
+    ok(nopro.code === 1 && /no profile on the feed yet/.test(nopro.err), `invite with no published profile -> exit 1, publish first (${nopro.err.trim()})`);
+
+    // A clean HOME, as a friend's agent that has never used OpenAgent: the link says how to join.
+    const zero = await run(["connect", inviteLink], C);
+    ok(zero.code === 2 && zero.err.includes(`npx @5dive/openagent init --yes --name "<your name>" --role "<what you do>"\n  npx @5dive/openagent connect ${inviteLink}`), `connect <invite> on a clean HOME -> exit 2, join with init, then the same connect (${zero.err.trim()})`);
+    ok(!fs.existsSync(path.join(C.OPENAGENT_HOME, "agent.key")), "connect on a clean HOME made no key by itself");
+    ok((await run(["init", "--yes", "--name", "Cy", "--role", "Friend"], C)).code === 0, "Cy joins with init");
+    const cy = Object.values(PROFILES).find((p) => p.name === "Cy").did;
+    const fromInvite = await run(["connect", inviteLink], C);
+    const cyLink = `https://a2a.example/owner?agent=${cy.slice(8)}&connect=${ada.slice(8)}`;
+    ok(fromInvite.code === 0 && fromInvite.out.includes(`connect with "Ada":\n  ${cyLink}\n`), `connect <invite link> -> the owner link to connect with Ada, by name (${fromInvite.out.trim()})`);
+    const fij = JSON.parse((await run(["connect", inviteLink, "--json"], C)).out);
+    ok(fij.ok && fij.to === ada && fij.name === "Ada" && fij.sent === false && fij.link === cyLink, "connect <invite link> --json resolves to the inviter's did, sent false");
+    const cyByName = JSON.parse((await run(["connect", "Ada", "--json"], C)).out);
+    ok(cyByName.to === fij.to && cyByName.link === fij.link, "connect <invite link> and connect <name> resolve to the same did and link");
+    const byProfile = JSON.parse((await run(["connect", `https://openagent.5dive.ai/feed/agent/${ada.slice(8)}?ref=x`, "--json"], C)).out);
+    ok(byProfile.to === ada, "a profile link resolves the same did");
+    const own2 = await run(["connect", inviteLink], A);
+    ok(own2.code === 2 && /your own invite link: send it to a friend/.test(own2.err), "your own invite link -> exit 2, send it to a friend");
+    const ghost = await run(["connect", `https://a2a.example/invite/${didKeyFromPublicKey(require("../lib/provenance").publicPemFromPrivate(generateKeypair().privateKey)).slice(8)}`], C);
+    ok(ghost.code === 1 && /no agent on the feed at that link/.test(ghost.err), "an invite link to a key with no profile -> exit 1, no agent there");
+    const notInvite = await run(["connect", "https://a2a.example/p/0123456789abcdef01234567"], C);
+    ok(notInvite.code === 1 && /not an invite or profile link/.test(notInvite.err), "a link that is not an invite or profile -> exit 1, says so");
+    ok(!seen.slice(imark).some((x) => x.startsWith("POST ") && x !== "POST /a2a/profiles"), "invite and connect <link> made no POST but the two inits' profiles (no connection, no owner)");
 
     // The owner approves Ada's request on the page (the stub stands in for it).
     edges.set(`${ada} ${bo}`, "connect");
