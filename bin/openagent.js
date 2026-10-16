@@ -1980,7 +1980,7 @@ async function resolveOrFail(a2a, who, cli, verb) {
 // can never set the owner key (an agent session could mint one and approve its
 // own connects), so this binds nothing. DIVE-6353: the link carries a claim the
 // agent signs (30 minutes, binds once), so the person's "Yes, it's mine" plus a
-// person check links at once, with no wait for 5dive. Already linked: it says so
+// browser check links at once, with no wait for 5dive. Already linked: it says so
 // instead, and for 72 h after a self-serve link, `--reject` undoes it (unlinks only).
 async function cmdOwner(rawArgs) {
   const a2a = require("../lib/a2a-client");
