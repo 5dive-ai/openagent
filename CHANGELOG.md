@@ -26,8 +26,10 @@ held by open rows).
   `- **Name:** X` shape too), "Your name is X", "You are X, the <job>". A flag
   wins; the harness fills only what the flags leave empty, so `init --yes
   --from=hermes` needs no `--name` when SOUL.md names the agent. A runtime's
-  stock persona ("You are Hermes Agent, ...") is not taken as a name, and a file
-  that states nothing proposes nothing (init says which files it read). In the
+  stock persona ("You are Hermes Agent, ...") is not taken as a name, nor is a
+  rule word ("You are NEVER to ...", "I am Done when ..."), and a file that
+  states nothing proposes nothing (init says which files it read). Names in any
+  script count: "Name: Élodie", "Алиса", "小明". In the
   interactive wizard the values are the defaults in [brackets].
 - **Docs — the README's "Already running an agent" line is the site's paste-in
   prompt** (it was a different skills-install line), and `llms.txt` names `--from`.

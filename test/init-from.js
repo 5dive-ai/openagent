@@ -61,6 +61,7 @@ const HERMES_DEFAULT = "You are Hermes Agent, an intelligent AI assistant create
 const HERMES_OWN = "You are Hermes Agent.\n\nYour name is Bramble. You are Bramble, the household's research librarian.\nTone: Warm, precise, never in a hurry.\n";
 const CLAUDE_OWN = "# Working here\n\nYou are an agent working on the billing service.\n\nYou are **Quill**, a backend engineer. Short answers.\n";
 const CLAUDE_PLAIN = "# Project rules\n\n- Run the tests before you push.\n- name: billing-api\n- Title: Q3 cleanup notes from the planning meeting, kept here for later\n";
+const CLAUDE_RULES = "# Rules\n\nYou are NEVER to commit secrets.\nYou are ONLY allowed to edit src/.\nYou are ALWAYS to run the tests.\nI am Done when CI is green.\n";
 
 console.log("\n-- reading a harness's own persona --");
 
@@ -87,6 +88,23 @@ t("Claude Code CLAUDE.md: 'You are **Quill**, a backend engineer', not 'You are 
 t("a CLAUDE.md of plain rules proposes nothing (a lowercase 'name:' slug is not a name)", () => {
   // A lowercase "name:" is a slug, and a 60+ character "Title:" is not a job.
   assert.deepStrictEqual(readText(CLAUDE_PLAIN), {});
+});
+
+t("a rule word is not a name: all-caps NEVER / ONLY / ALWAYS, and a modal like 'Done'", () => {
+  assert.deepStrictEqual(readText("You are NEVER to commit secrets."), {});
+  assert.deepStrictEqual(readText("I am Done when CI is green."), {});
+  assert.deepStrictEqual(readText("You are ONLY allowed to edit src/."), {});
+  assert.deepStrictEqual(readText("You are Only allowed to edit src/."), {});
+  assert.deepStrictEqual(readText("- **Name:** NEVER"), {});
+  assert.deepStrictEqual(readText(CLAUDE_RULES), {});
+});
+
+t("a name in any script is kept: Élodie, Алиса, 小明 on a Name: line; Алиса in a sentence", () => {
+  assert.deepStrictEqual(readText("- **Name:** Élodie\n- **Role:** Translator\n"), { name: "Élodie", role: "Translator" });
+  assert.deepStrictEqual(readText("Name: Алиса"), { name: "Алиса" });
+  assert.deepStrictEqual(readText("Name: 小明"), { name: "小明" });
+  assert.deepStrictEqual(readText("You are Алиса, a translator."), { name: "Алиса", role: "translator" });
+  assert.deepStrictEqual(readText("Your name is Élodie."), { name: "Élodie" });
 });
 
 t("a block `install` wrote reads back as that persona (name and job)", () => {
@@ -162,6 +180,16 @@ t("a harness file with no name: --yes still needs --name, and says it looked", (
   assert.strictEqual(r.status, 2);
   assert.match(r.stdout, /no name or persona stated in .*CLAUDE\.md, so every pick is yours/);
   assert.match(r.stderr, /no name found in Claude Code's persona file, so --name is needed/);
+});
+
+t("a CLAUDE.md of all-caps rules: --yes exits 2 asking for --name, writes no never.persona.yaml", () => {
+  const home = tmp();
+  const cwd = tmp();
+  put(home, ".claude/CLAUDE.md", CLAUDE_RULES);
+  const r = cli(home, cwd, "init", "--yes", "--from=claude-code", "--no-publish");
+  assert.strictEqual(r.status, 2, r.stderr + r.stdout);
+  assert.match(r.stderr, /no name found in Claude Code's persona file, so --name is needed/);
+  assert.deepStrictEqual(fs.readdirSync(cwd).filter((f) => f.endsWith(".persona.yaml")), []);
 });
 
 t("no harness file at all: says so, and --name works as before", () => {
