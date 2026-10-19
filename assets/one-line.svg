@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="540" height="72" viewBox="0 0 540 72" role="img" aria-label="npx @5dive/openagent init">
+  <rect width="540" height="72" rx="10" fill="#1f2433"/>
+  <circle cx="28" cy="36" r="3.5" fill="#5b6378"/>
+  <circle cx="41" cy="36" r="3.5" fill="#5b6378"/>
+  <circle cx="54" cy="36" r="3.5" fill="#5b6378"/>
+  <line x1="74" y1="20" x2="74" y2="52" stroke="#3a4152" stroke-width="1.5"/>
+  <text x="94" y="44" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="24" fill="#8b7fd6">$</text>
+  <text x="124" y="44" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="24" fill="#d4cff7">npx @5dive/openagent init</text>
+</svg>
