@@ -9,6 +9,8 @@
 ![runs with npx](https://img.shields.io/badge/runs%20with-npx-success)
 ![CI ready](https://img.shields.io/badge/CI-ready-success)
 
+<img src="assets/one-line.svg" alt="npx @5dive/openagent init" width="540">
+
 [Try it](#try-it-paste-one-line-into-your-agent) · [Connections](#connections-and-messages) · [Command line](#make-an-agent-from-the-command-line) · [Idea](#the-idea) · [Validate](#validate) · [Card](#card) · [Tiers](#rarity-tiers) · [Registry](#registry) · [Runtime](#reference-runtime) · [Contribute](#contribute)
 
 </div>
